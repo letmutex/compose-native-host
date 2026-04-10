@@ -22,6 +22,7 @@ expect fun isComposeNativeHostAvailable(): Boolean
 interface ComposeNativeHostScope {
     // Event bridge back to the native host.
     val host: ComposeNativeHostHandle
+
     // Latest window metrics reported by the host.
     val windowInfo: State<WindowInfo>
 }
@@ -49,12 +50,16 @@ val LocalComposeNativeHostHandle = staticCompositionLocalOf<ComposeNativeHostHan
 value class WindowInfo {
     // Window width in physical pixels.
     val width: Int
+
     // Window height in physical pixels.
     val height: Int
+
     // Backing scale factor.
     val scale: Float
+
     // Display refresh rate in Hz.
     val refreshRate: Int
+
     // Whether the native window is focused.
     val isFocused: Boolean
 }
@@ -77,16 +82,22 @@ class NativeHostUiThread(
 
     // Starts the UI thread if it is not already running.
     fun ensureStarted()
+
     // Returns true when called from the managed UI thread.
     fun isUiThread(): Boolean
+
     // Dumps the UI thread state and stack trace.
     fun dumpState(): String
+
     // Runs immediately on the UI thread or posts otherwise.
     fun dispatch(runnable: Runnable)
+
     // Posts work to the UI thread without waiting.
     fun post(runnable: Runnable)
+
     // Runs work on the UI thread and waits for the result.
     fun <T> callOnUiThread(block: () -> T): T
+
     // Stops the UI thread and rejects later work.
     fun close()
 }
