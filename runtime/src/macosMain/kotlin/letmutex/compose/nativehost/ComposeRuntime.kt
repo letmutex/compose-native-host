@@ -5,11 +5,13 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.draganddrop.DragAndDropTransferAction
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalUriHandler
 import letmutex.compose.nativehost.diagnostics.FrameStallWatchdog
 import letmutex.compose.nativehost.diagnostics.FrameTimingLogger
 import letmutex.compose.nativehost.diagnostics.VsyncDelayAnalyzer
 import letmutex.compose.nativehost.internal.ComposeMetalRenderer
 import letmutex.compose.nativehost.internal.MacOsComposeBridge
+import letmutex.compose.nativehost.internal.NativeHostUriHandler
 import letmutex.compose.nativehost.internal.RenderFrameCallback
 import letmutex.compose.nativehost.internal.createComposeMetalRenderer
 import java.lang.ThreadLocal
@@ -427,8 +429,17 @@ private fun RenderContent(
     scope: ComposeNativeHostScope,
     content: @Composable ComposeNativeHostScope.() -> Unit,
 ) {
-    CompositionLocalProvider(LocalComposeNativeHostHandle provides scope.host) {
-        content(scope)
+    if (MacOsComposeBridge.isSharedLibraryRuntime()) {
+        CompositionLocalProvider(
+            LocalComposeNativeHostHandle provides scope.host,
+            LocalUriHandler provides NativeHostUriHandler,
+        ) {
+            content(scope)
+        }
+    } else {
+        CompositionLocalProvider(LocalComposeNativeHostHandle provides scope.host) {
+            content(scope)
+        }
     }
 }
 

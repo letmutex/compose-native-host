@@ -64,6 +64,7 @@ private enum class SamplePage(val title: String) {
     Animations("Animations"),
     Scroll("Scroll"),
     DragDrop("DragDrop"),
+    Links("Links"),
 }
 
 private data class SampleUiState(
@@ -321,6 +322,7 @@ private fun SamplePageSurface(
                         resizeHint = resizeHint,
                     )
 
+                    SamplePage.Links -> LinksPage()
                     SamplePage.Events -> EventsPage(onInteraction = onInteraction)
                     SamplePage.Windows -> WindowsPage(onInteraction = onInteraction)
                     SamplePage.Animations -> AnimationsPage(onInteraction = onInteraction)
