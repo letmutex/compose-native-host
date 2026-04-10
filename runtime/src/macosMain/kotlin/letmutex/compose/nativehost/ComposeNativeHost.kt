@@ -8,7 +8,7 @@ actual fun ComposeNativeHost(content: @Composable ComposeNativeHostScope.() -> U
     composeNativeHostJvm(content)
 }
 
-fun isComposeNativeHostAvailable(): Boolean = MacOsComposeBridge.isAvailable()
+actual fun isComposeNativeHostAvailable(): Boolean = MacOsComposeBridge.isAvailable()
 
 private fun composeNativeHostJvm(content: @Composable ComposeNativeHostScope.() -> Unit) {
     check(System.getProperty("os.name").contains("Mac", ignoreCase = true)) {

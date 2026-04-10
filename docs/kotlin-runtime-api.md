@@ -11,6 +11,9 @@ This snapshot includes the public/common API and the public macOS-specific API t
 ```kotlin
 // Entry point for hosted Compose content inside the native host.
 expect fun ComposeNativeHost(content: @Composable ComposeNativeHostScope.() -> Unit)
+
+// Returns true when the current process can use the native host bridge.
+expect fun isComposeNativeHostAvailable(): Boolean
 ```
 
 ### Host scope and event bridge
@@ -87,16 +90,4 @@ class NativeHostUiThread(
     // Stops the UI thread and rejects later work.
     fun close()
 }
-```
-
-## macOS/JVM API
-
-### macOS availability and actual hosted entry point
-
-```kotlin
-// macOS implementation of the hosted Compose entry point.
-actual fun ComposeNativeHost(content: @Composable ComposeNativeHostScope.() -> Unit)
-
-// Returns true when the native macOS bridge is loaded and usable.
-fun isComposeNativeHostAvailable(): Boolean
 ```
