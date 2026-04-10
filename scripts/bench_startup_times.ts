@@ -1,12 +1,27 @@
 #!/usr/bin/env bun
 
+/**
+ * Usage:
+ *   bun scripts/bench_startup_times.ts
+ *   RUNS=20 WARMUPS=5 bun scripts/bench_startup_times.ts
+ *   SAMPLES=AppKit,Mixed bun scripts/bench_startup_times.ts
+ *   MODE=native-image bun scripts/bench_startup_times.ts
+ *
+ * Environment variables:
+ *   RUNS        Number of measured runs. Default: 10
+ *   WARMUPS     Number of warmup runs. Default: 3
+ *   TIMEOUT_MS  Per-run timeout in milliseconds. Default: 5000
+ *   SAMPLES     Comma-separated sample labels: AppKit, SwiftUi, Mixed
+ *   MODE        Run mode: "jvm" or "native-image". Default: jvm
+ */
+
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
 type SampleBenchmark = {
     label: string;
-    task: string;
+    projectPath: string;
 };
 
 type PhaseStats = {
@@ -20,30 +35,36 @@ const RunTimeoutMs = 5_000;
 const PhaseRegex = /\[NativeHost\] \[(\d+(?:\.\d+)?) ms\] Phase: (.+)$/;
 
 const samples: SampleBenchmark[] = [
-    { label: "AppKit", task: ":composeNativeHostSampleAppkit:nativeRun" },
-    { label: "SwiftUi", task: ":composeNativeHostSampleSwiftUi:nativeRun" },
-    { label: "Mixed", task: ":composeNativeHostSampleMixed:nativeRun" },
+    { label: "AppKit", projectPath: ":appkit" },
+    { label: "SwiftUi", projectPath: ":swiftui" },
+    { label: "Mixed", projectPath: ":mixed" },
 ];
 
-const repoRoot = path.resolve(import.meta.dir, "..", "..");
+const repoRoot = path.resolve(import.meta.dir, "..");
 const configuredRunCount = readPositiveInt(process.env.RUNS, RunCount);
 const configuredWarmupCount = readNonNegativeInt(process.env.WARMUPS, WarmupCount);
 const configuredTimeoutMs = readPositiveInt(process.env.TIMEOUT_MS, RunTimeoutMs);
 const selectedLabels = new Set((process.env.SAMPLES ?? "").split(",").map((value) => value.trim()).filter(Boolean));
 const timeoutCommand = resolveTimeoutCommand();
+const runMode = readRunMode(process.env.MODE);
 
 function main() {
     const selectedSamples = samples.filter(sample => selectedLabels.size === 0 || selectedLabels.has(sample.label));
+    if (selectedSamples.length === 0) {
+        throw new Error(
+            `No samples selected. Available samples: ${samples.map(sample => sample.label).join(", ")}`,
+        );
+    }
     for (const sample of selectedSamples) {
         const phasesByName = new Map<string, PhaseStats>();
         const phaseOrder: string[] = [];
 
         for (let index = 0; index < configuredWarmupCount; index += 1) {
-            runSample(sample.task);
+            runSample(sample);
         }
 
         for (let index = 0; index < configuredRunCount; index += 1) {
-            const output = runSample(sample.task);
+            const output = runSample(sample);
             const phaseMatches = parsePhases(output);
 
             for (const match of phaseMatches) {
@@ -61,20 +82,34 @@ function main() {
     }
 }
 
-function runSample(task: string): string {
+function runSample(sample: SampleBenchmark): string {
+    const gradleArgs = ["-p", "samples", `${sample.projectPath}:${gradleTaskForMode(runMode)}`];
     const result = timeoutCommand
-        ? spawnSync(timeoutCommand, [formatTimeoutSeconds(configuredTimeoutMs), "./gradlew", task], {
+        ? spawnSync(timeoutCommand, [formatTimeoutSeconds(configuredTimeoutMs), "./gradlew", ...gradleArgs], {
             cwd: repoRoot,
             encoding: "utf8",
             maxBuffer: 16 * 1024 * 1024,
         })
-        : spawnSync("./gradlew", [task], {
+        : spawnSync("./gradlew", gradleArgs, {
             cwd: repoRoot,
             encoding: "utf8",
             timeout: configuredTimeoutMs,
             maxBuffer: 16 * 1024 * 1024,
         });
-    return `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+    const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+    if (result.error) {
+        throw result.error;
+    }
+    if (result.status !== 0 && result.signal !== "SIGTERM") {
+        throw new Error(
+            `Sample '${sample.label}' failed with exit code ${result.status ?? "unknown"}.\n${output}`,
+        );
+    }
+    return output;
+}
+
+function gradleTaskForMode(mode: RunMode) {
+    return mode === "native-image" ? "macosNativeImageRun" : "macosRun";
 }
 
 function resolveTimeoutCommand() {
@@ -151,6 +186,18 @@ function readNonNegativeInt(rawValue: string | undefined, fallback: number) {
     }
     const value = Number.parseInt(rawValue, 10);
     return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+type RunMode = "jvm" | "native-image";
+
+function readRunMode(rawValue: string | undefined): RunMode {
+    if (!rawValue || rawValue === "jvm") {
+        return "jvm";
+    }
+    if (rawValue === "native-image") {
+        return "native-image";
+    }
+    throw new Error(`Unsupported MODE '${rawValue}'. Expected 'jvm' or 'native-image'.`);
 }
 
 main();

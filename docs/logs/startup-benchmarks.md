@@ -1,6 +1,6 @@
 # Startup Benchmarks
 
-Measured with `compose-native-host/scripts/bench_startup_times.ts`.
+Measured with `scripts/bench_startup_times.ts`.
 
 Configuration:
 
