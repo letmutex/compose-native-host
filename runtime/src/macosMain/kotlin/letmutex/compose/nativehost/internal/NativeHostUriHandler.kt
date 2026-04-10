@@ -10,13 +10,13 @@ internal object NativeHostUriHandler : UriHandler {
         val normalizedUri = try {
             URI(uri).toString()
         } catch (error: URISyntaxException) {
-            throw IllegalArgumentException("Invalid URI: $uri", error)
+            throw IllegalArgumentException("Invalid URI", error)
         }
 
         try {
             ProcessBuilder("/usr/bin/open", normalizedUri).start()
         } catch (error: IOException) {
-            throw IllegalArgumentException("Failed to open URI: $normalizedUri", error)
+            throw IllegalArgumentException("Failed to open URI", error)
         }
     }
 }
