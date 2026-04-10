@@ -10,28 +10,22 @@ import org.gradle.api.Project
 import org.gradle.api.Task
 import org.gradle.api.tasks.TaskProvider
 
-private val strippedComposeDesktopDragAndDropEntries =
+private val patchedRuntimeClassEntryPrefixes =
     listOf(
-        "androidx/compose/ui/draganddrop/DragAndDropEvent.class",
-        "androidx/compose/ui/draganddrop/DragAndDropTransferAction.class",
-        "androidx/compose/ui/draganddrop/DragAndDropTransferAction\$Companion.class",
-        "androidx/compose/ui/draganddrop/DragAndDropTransferData.class",
-        "androidx/compose/ui/draganddrop/DragAndDropTransferable.class",
-        "androidx/compose/ui/draganddrop/DragAndDrop_desktopKt.class",
-        "androidx/compose/ui/draganddrop/DragAndDrop_desktopKt\$DragAndDropTransferable\$1.class",
+        "androidx/compose/ui/",
+        "androidx/lifecycle/",
+        "org/jetbrains/skiko/",
     )
 
-private val strippedComposeDesktopClipboardEntries =
-    listOf(
-        "androidx/compose/ui/platform/AwtPlatformClipboard.class",
-        "androidx/compose/ui/platform/ClipEntry.class",
-        "androidx/compose/ui/platform/ClipMetadata.class",
-        "androidx/compose/ui/platform/EmptyTransferable.class",
-        "androidx/compose/ui/platform/PlatformClipboard_desktopKt.class",
+private val patchedRuntimeOwnerArtifacts =
+    setOf(
+        "org.jetbrains.compose.ui:ui-desktop",
+        "androidx.lifecycle:lifecycle-runtime-desktop",
+        "org.jetbrains.androidx.lifecycle:lifecycle-runtime-desktop",
+        "org.jetbrains.skiko:skiko-awt",
     )
 
-private val strippedComposeDesktopOverrideEntries =
-    strippedComposeDesktopDragAndDropEntries + strippedComposeDesktopClipboardEntries
+private const val nativeHostRuntimeMarkerEntry = "letmutex/compose/nativehost/ComposeRuntime.class"
 
 fun registerPreparePatchedComposeDesktopRuntimeClasspathTask(
     project: Project,
@@ -50,25 +44,35 @@ fun registerPreparePatchedComposeDesktopRuntimeClasspathTask(
             val mapFile = bundleConfig.patchedRuntimeClasspathMapFile
             outputDir.deleteRecursively()
             outputDir.mkdirs()
-            val stagedArtifacts =
+            val runtimeArtifacts =
                 runtimeClasspath.get().resolvedConfiguration.resolvedArtifacts
                     .filter { it.isFile() && it.file.extension == "jar" }
                     .distinctBy { it.file.absolutePath }
-                    .map { artifact ->
-                        val inputJar = artifact.file
-                        val outputJar = File(outputDir, artifact.stagedJarName())
-                        if (inputJar.name.startsWith("ui-desktop-")) {
-                            copyJarRemovingEntries(inputJar, outputJar, strippedComposeDesktopOverrideEntries)
-                        } else {
-                            inputJar.copyTo(outputJar, overwrite = true)
-                        }
-                        StagedRuntimeArtifact(
-                            originalJarName = inputJar.name,
-                            stagedJarName = outputJar.name,
-                            packagedJarName = inputJar.packagedJarName(),
-                            originalJarMd5 = inputJar.md5Hex(),
+            val runtimeJar = resolveNativeHostRuntimeJar(runtimeArtifacts)
+            val patchedRuntimeEntries = collectPatchedRuntimeClassEntries(runtimeJar)
+            val stagedArtifacts =
+                runtimeArtifacts.map { artifact ->
+                    val inputJar = artifact.file
+                    val outputJar = File(outputDir, artifact.stagedJarName())
+                    if (
+                        patchedRuntimeEntries.isNotEmpty() &&
+                        shouldStripPatchedRuntimeEntries(
+                            artifact = artifact,
+                            runtimeJar = runtimeJar,
+                            patchedRuntimeEntries = patchedRuntimeEntries,
                         )
+                    ) {
+                        copyJarRemovingEntries(inputJar, outputJar, patchedRuntimeEntries)
+                    } else {
+                        inputJar.copyTo(outputJar, overwrite = true)
                     }
+                    StagedRuntimeArtifact(
+                        originalJarName = inputJar.name,
+                        stagedJarName = outputJar.name,
+                        packagedJarName = inputJar.packagedJarName(),
+                        originalJarMd5 = inputJar.md5Hex(),
+                    )
+                }
             mapFile.parentFile.mkdirs()
             // Persist the original jar identity next to the staged output so distributable patching can
             // replace Compose Desktop's packaged jars without guessing its hashed file names.
@@ -102,6 +106,57 @@ private fun String.sanitizeJarComponent(): String =
         for (char in this@sanitizeJarComponent) {
             append(if (char.isLetterOrDigit() || char == '.' || char == '_' || char == '-') char else '-')
         }
+    }
+
+private fun resolveNativeHostRuntimeJar(
+    artifacts: List<ResolvedArtifact>,
+): File? =
+    artifacts
+        .asSequence()
+        .map { it.file }
+        .firstOrNull { jarContainsEntry(it, nativeHostRuntimeMarkerEntry) }
+
+private fun collectPatchedRuntimeClassEntries(
+    runtimeJar: File?,
+): Set<String> {
+    runtimeJar ?: return emptySet()
+    return ZipFile(runtimeJar).use { zip ->
+        zip.entries().asSequence()
+            .map(ZipEntry::getName)
+            .filter { entryName ->
+                entryName.endsWith(".class") &&
+                    patchedRuntimeClassEntryPrefixes.any(entryName::startsWith)
+            }
+            .toCollection(linkedSetOf())
+    }
+}
+
+private fun shouldStripPatchedRuntimeEntries(
+    artifact: ResolvedArtifact,
+    runtimeJar: File?,
+    patchedRuntimeEntries: Set<String>,
+): Boolean =
+    artifact.file != runtimeJar &&
+        artifact.coordinateKey() in patchedRuntimeOwnerArtifacts &&
+        jarContainsAnyEntry(artifact.file, patchedRuntimeEntries)
+
+private fun ResolvedArtifact.coordinateKey(): String =
+    "${moduleVersion.id.group}:$name"
+
+private fun jarContainsAnyEntry(
+    jarFile: File,
+    entryNames: Set<String>,
+): Boolean =
+    ZipFile(jarFile).use { zip ->
+        zip.entries().asSequence().any { it.name in entryNames }
+    }
+
+private fun jarContainsEntry(
+    jarFile: File,
+    entryName: String,
+): Boolean =
+    ZipFile(jarFile).use { zip ->
+        zip.getEntry(entryName) != null
     }
 
 private fun copyJarRemovingEntries(
