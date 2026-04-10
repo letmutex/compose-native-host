@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up GraalVM 25
+        uses: graalvm/setup-graalvm@v1
+        with:
+          distribution: graalvm
+          java-version: "25"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify toolchain
+        run: |
+          java --version
+          native-image --version
+
+      - name: Run root checks
+        run: ./gradlew check
+
+      - name: Build minimal native-image sample bundle
+        run: ./gradlew -p samples :swiftui-min:macosNativeImageStageAppBundle

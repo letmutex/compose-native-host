@@ -1,0 +1,49 @@
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+plugins {
+    id("io.github.letmutex.compose.nativehost")
+    id("org.jetbrains.kotlin.multiplatform")
+    id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.compose")
+}
+
+kotlin {
+    jvm("desktop")
+
+    sourceSets {
+        val desktopMain by getting {
+            dependencies {
+                implementation(project(":compose"))
+            }
+        }
+    }
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>().configureEach {
+    compilerOptions.jvmTarget.set(JvmTarget.JVM_17)
+}
+
+val composePackageName = "ComposeNativeHostAppKit"
+val composePackageVersion = "1.0.0"
+
+composeNativeHost {
+    appName.set("Compose Native Host AppKit")
+    bundleIdentifier.set("letmutex.compose.nativehost.sample.appkit")
+    nativeImage {
+        mainClasses("letmutex.compose.nativehost.sample.HostedMainKt")
+    }
+}
+
+compose.desktop {
+    application {
+        mainClass = "letmutex.compose.nativehost.sample.HostedMainKt"
+        jvmArgs("-XstartOnFirstThread")
+        nativeDistributions {
+            targetFormats(TargetFormat.Dmg)
+            packageName = composePackageName
+            packageVersion = composePackageVersion
+        }
+        buildTypes.release.proguard { isEnabled.set(false) }
+    }
+}

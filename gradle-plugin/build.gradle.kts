@@ -1,0 +1,44 @@
+import org.gradle.api.tasks.bundling.Jar
+import org.gradle.api.tasks.bundling.Zip
+
+plugins {
+    `kotlin-dsl`
+    `java-gradle-plugin`
+    alias(libs.plugins.maven.publish)
+}
+
+gradlePlugin {
+    plugins {
+        create("composeNativeHost") {
+            id = "io.github.letmutex.compose.nativehost"
+            implementationClass = "letmutex.compose.nativehost.plugin.ComposeNativeHostPlugin"
+        }
+    }
+}
+
+val packageHostSources by tasks.registering(Zip::class) {
+    archiveFileName.set("native-host-sources.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("generated/resources"))
+    from("../runtime/src/macosMain/swift") {
+        include("**/*.swift")
+        into("swift")
+    }
+    from("../runtime/src/macosMain/native") {
+        include("*.m", "*.h")
+        into("native")
+    }
+}
+
+sourceSets.main {
+    resources.srcDir(packageHostSources.flatMap { it.destinationDirectory })
+}
+
+tasks.named("processResources") {
+    dependsOn(packageHostSources)
+}
+
+tasks.withType<Jar>().configureEach {
+    if (name == "sourcesJar") {
+        dependsOn(packageHostSources)
+    }
+}
