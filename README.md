@@ -11,7 +11,7 @@
 - You own the entry point. Compose is just a view in your native window
 - Embed Compose view in AppKit, SwiftUI, or both
 - Smooth scrolling, smooth window resizing. Sorry AWT
-- Builtin GraalVM native image support. Sorry AWT, again
+- Built-in GraalVM native image support. Sorry AWT, again
 - Multi-window and multi-runtime support
 - Android-inspired profile frame rendering
 - No code changes needed for existing Compose Desktop content
@@ -177,7 +177,7 @@ You own the App entry point in **Swift**. Your app's Swift sources (e.g., in `sr
 
 ### Runtime (Kotlin & Swift)
 *   **Kotlin**: Manages the Compose state, layout, and logic. Uses **Skiko** for Skia rendering bindings.
-*   **Swift**: Provides the native macOS host API (`ComposeRuntime`, `ComposeView`). These Swift sources are bundled inside the Gradle plugin and extracted during the build to be compiled into your app.
+*   **Swift**: Provides the native macOS host API (`ComposeHostRuntime`, `ComposeView`). These Swift sources are bundled inside the Gradle plugin and extracted during the build to be compiled into your app.
 
 ### Bridge (JNI/Obj C)
 A thin Objective C bridge handles low level JNI communication between the Kotlin JVM/Native Image and the Swift host.

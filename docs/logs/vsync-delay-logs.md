@@ -1,4 +1,4 @@
-# Swift (VCDispalyLink) to Kotlin (requestFrame) Delay
+# Swift (CVDisplayLink) to Kotlin (`requestFrame`) Delay
 
 
 ### NSLock + Swift Async Signal Thread + JNI Invoke
