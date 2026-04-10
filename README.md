@@ -1,5 +1,10 @@
 <h1 align="center">Compose Native Host</h1>
 <p align="center">Compose in native macOS window</p>
+<p align="center">
+  <a href="https://central.sonatype.com/artifact/io.github.letmutex.compose-native-host/runtime">
+    <img alt="Maven Central Version" src="https://img.shields.io/maven-central/v/io.github.letmutex.compose-native-host/runtime?label=Maven%20Central&style=flat-square">
+  </a>
+</p>
 
 ![Sample Screenshot](./sample.png)
 
