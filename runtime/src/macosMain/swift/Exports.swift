@@ -63,6 +63,15 @@ public func nativeHostRequestRenderTick(_ runtimeId: Int64) {
     runtimeState(for: runtimeId)?.requestRenderTick()
 }
 
+@_cdecl("nativeHostSetPointerIcon")
+public func nativeHostSetPointerIcon(_ runtimeId: Int64, _ cursorType: Int32) {
+    runtimeState(for: runtimeId)?.withCoordinator { runtime in
+        runtime?.dispatchToMain {
+            runtime?.setPointerIcon(cursorType)
+        }
+    }
+}
+
 @_cdecl("nativeHostEmitAppEvent")
 public func nativeHostEmitAppEvent(
     _ runtimeId: Int64,

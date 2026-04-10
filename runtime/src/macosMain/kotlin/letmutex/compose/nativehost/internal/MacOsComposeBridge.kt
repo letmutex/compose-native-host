@@ -96,6 +96,10 @@ internal class MacOsComposeBridge(
         MacOsComposeBridgeBindings.nativeHostRequestRenderTick(runtimeId)
     }
 
+    fun setPointerIcon(cursorType: Int) {
+        MacOsComposeBridgeBindings.nativeHostSetPointerIcon(runtimeId, cursorType)
+    }
+
     fun updateTextInputGeometry(geometry: TextInputGeometry?) {
         if (geometry == null) {
             MacOsComposeBridgeBindings.nativeHostClearTextInputGeometry(runtimeId)
@@ -221,6 +225,8 @@ internal object MacOsComposeBridgeBindings {
     external fun nativeHostPresentDrawable(runtimeId: Long)
 
     external fun nativeHostRequestRenderTick(runtimeId: Long)
+
+    external fun nativeHostSetPointerIcon(runtimeId: Long, cursorType: Int)
 
     external fun nativeHostEmitAppEvent(
         runtimeId: Long,

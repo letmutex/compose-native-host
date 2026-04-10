@@ -192,6 +192,10 @@ final class ComposeHostCoordinator: NSObject {
         platformView?.updateTextInputGeometry(geometry)
     }
 
+    func setPointerIcon(_ cursorType: Int32) {
+        platformView?.setPointerIcon(cursorType)
+    }
+
     func handleExternalDragEntered(_ snapshot: ExternalDropSnapshot) -> Bool {
         guard snapshot.hasPayload || snapshot.payloadKind != 0 else {
             return false

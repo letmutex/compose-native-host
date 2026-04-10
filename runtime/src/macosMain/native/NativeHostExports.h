@@ -9,6 +9,7 @@ int64_t nativeHostMetalQueuePtr(int64_t runtimeId);
 int64_t nativeHostAcquireDrawableTexturePtr(int64_t runtimeId);
 void nativeHostPresentDrawable(int64_t runtimeId);
 void nativeHostRequestRenderTick(int64_t runtimeId);
+void nativeHostSetPointerIcon(int64_t runtimeId, int32_t cursorType);
 void nativeHostEmitAppEvent(int64_t runtimeId, const char *namePtr, const char *payloadPtr);
 void nativeHostLogPhaseTiming(const char *namePtr);
 void nativeHostEmitProfileFrameSample(
