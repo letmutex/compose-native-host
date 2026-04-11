@@ -17,7 +17,7 @@ internal object MainDispatcherChecker {
             mainDispatcherThread = Thread.currentThread()
             return true
         }
-        if (!Dispatchers.Main.immediate.isDispatchNeeded(EmptyCoroutineContext)) {
+        if (isCurrentThreadMainImmediate()) {
             mainDispatcherThread = Thread.currentThread()
             return true
         }
@@ -29,7 +29,7 @@ internal object MainDispatcherChecker {
                 mainDispatcherThread = Thread.currentThread()
                 return true
             }
-            if (!Dispatchers.Main.immediate.isDispatchNeeded(EmptyCoroutineContext)) {
+            if (isCurrentThreadMainImmediate()) {
                 mainDispatcherThread = Thread.currentThread()
                 return true
             }
@@ -43,6 +43,11 @@ internal object MainDispatcherChecker {
             }
         }
     }
+
+    private fun isCurrentThreadMainImmediate(): Boolean =
+        runCatching {
+            !Dispatchers.Main.immediate.isDispatchNeeded(EmptyCoroutineContext)
+        }.getOrDefault(false)
 
     fun isMainDispatcherThread(): Boolean {
         if (NativeHostUiThread.shared.isUiThread()) {
