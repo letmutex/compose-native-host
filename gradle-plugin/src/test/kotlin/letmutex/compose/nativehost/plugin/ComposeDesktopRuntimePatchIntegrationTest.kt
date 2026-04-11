@@ -97,6 +97,7 @@ class ComposeDesktopRuntimePatchIntegrationTest {
         assertJarContains(runtimeJar, "androidx/compose/ui/Foo.class")
         assertJarContains(runtimeJar, "androidx/lifecycle/Bar.class")
         assertJarContains(runtimeJar, "org/jetbrains/skiko/Baz.class")
+        assertJarEntryText(runtimeJar, mainDispatcherFactoryServiceEntry, "$nativeHostMainDispatcherFactoryClass\n")
 
         assertJarMissing(composeJar, "androidx/compose/ui/Foo.class")
         assertJarContains(composeJar, "keep/UiKeep.class")
@@ -203,6 +204,19 @@ class ComposeDesktopRuntimePatchIntegrationTest {
     private fun assertJarMissing(jar: Path, entryName: String) {
         ZipFile(jar.toFile()).use { zip ->
             assertFalse(zip.getEntry(entryName) != null, "Did not expect $entryName in $jar")
+        }
+    }
+
+    private fun assertJarEntryText(
+        jar: Path,
+        entryName: String,
+        expected: String,
+    ) {
+        ZipFile(jar.toFile()).use { zip ->
+            val entry = zip.getEntry(entryName)
+            assertTrue(entry != null, "Expected $entryName in $jar")
+            val actual = zip.getInputStream(entry).reader().readText()
+            assertEquals(expected, actual)
         }
     }
 }

@@ -198,28 +198,39 @@ internal fun PatchedApisPage(
             Button(
                 onClick = {
                     coroutineScope.launch {
-                        val (dispatcherThread, lifecycleMain) =
-                            withContext(Dispatchers.Main.immediate) {
-                                Thread.currentThread().name to reflectLifecycleMainDispatcherThread()
-                            }
                         dispatcherStatus =
-                            when (lifecycleMain) {
-                                true -> PatchedCheckStatus(
-                                    "Passed",
-                                    "Dispatchers.Main.immediate ran on $dispatcherThread and lifecycle returned true.",
-                                    Color(0xFF166534),
-                                )
-                                false -> PatchedCheckStatus(
-                                    "Failed",
-                                    "Dispatchers.Main.immediate ran on $dispatcherThread but lifecycle returned false.",
-                                    Color(0xFFB91C1C),
-                                )
-                                null -> PatchedCheckStatus(
-                                    "Unavailable",
-                                    "Lifecycle checker could not be invoked.",
-                                    Color(0xFFB45309),
-                                )
-                            }
+                            runCatching {
+                                withContext(Dispatchers.Main.immediate) {
+                                    Thread.currentThread().name to reflectLifecycleMainDispatcherThread()
+                                }
+                            }.fold(
+                                onSuccess = { (dispatcherThread, lifecycleMain) ->
+                                    when (lifecycleMain) {
+                                        true -> PatchedCheckStatus(
+                                            "Passed",
+                                            "Dispatchers.Main.immediate ran on $dispatcherThread and lifecycle returned true.",
+                                            Color(0xFF166534),
+                                        )
+                                        false -> PatchedCheckStatus(
+                                            "Failed",
+                                            "Dispatchers.Main.immediate ran on $dispatcherThread but lifecycle returned false.",
+                                            Color(0xFFB91C1C),
+                                        )
+                                        null -> PatchedCheckStatus(
+                                            "Unavailable",
+                                            "Lifecycle checker could not be invoked.",
+                                            Color(0xFFB45309),
+                                        )
+                                    }
+                                },
+                                onFailure = { error ->
+                                    PatchedCheckStatus(
+                                        "Unavailable",
+                                        error.message ?: "Dispatchers.Main.immediate could not be invoked.",
+                                        Color(0xFFB45309),
+                                    )
+                                },
+                            )
                     }
                 },
             ) {

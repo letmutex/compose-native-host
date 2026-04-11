@@ -55,15 +55,30 @@ fun registerPreparePatchedComposeDesktopRuntimeClasspathTask(
                 runtimeArtifacts.map { artifact ->
                     val inputJar = artifact.file
                     val outputJar = File(outputDir, artifact.stagedJarName())
-                    if (
-                        patchedRuntimeEntries.isNotEmpty() &&
-                        shouldStripPatchedRuntimeEntries(
-                            artifact = artifact,
-                            runtimeJar = runtimeJar,
-                            patchedRuntimeEntries = patchedRuntimeEntries,
+                    val serviceEntries =
+                        if (inputJar == runtimeJar) {
+                            mapOf(mainDispatcherFactoryServiceEntry to nativeHostMainDispatcherFactoryServiceContents())
+                        } else {
+                            emptyMap()
+                        }
+                    val removedEntries =
+                        when {
+                            patchedRuntimeEntries.isNotEmpty() &&
+                                shouldStripPatchedRuntimeEntries(
+                                    artifact = artifact,
+                                    runtimeJar = runtimeJar,
+                                    patchedRuntimeEntries = patchedRuntimeEntries,
+                                ) -> patchedRuntimeEntries
+                            serviceEntries.isNotEmpty() -> setOf(mainDispatcherFactoryServiceEntry)
+                            else -> emptySet()
+                        }
+                    if (removedEntries.isNotEmpty() || serviceEntries.isNotEmpty()) {
+                        copyJarUpdatingEntries(
+                            inputJar = inputJar,
+                            outputJar = outputJar,
+                            removedEntries = removedEntries,
+                            addedEntries = serviceEntries,
                         )
-                    ) {
-                        copyJarRemovingEntries(inputJar, outputJar, patchedRuntimeEntries)
                     } else {
                         inputJar.copyTo(outputJar, overwrite = true)
                     }
@@ -168,10 +183,11 @@ private fun jarContainsEntry(
         zip.getEntry(entryName) != null
     }
 
-private fun copyJarRemovingEntries(
+private fun copyJarUpdatingEntries(
     inputJar: File,
     outputJar: File,
     removedEntries: Collection<String>,
+    addedEntries: Map<String, ByteArray>,
 ) {
     val removedEntrySet = removedEntries.toSet()
     ZipFile(inputJar).use { zip ->
@@ -186,6 +202,11 @@ private fun copyJarRemovingEntries(
                         input.copyTo(output)
                     }
                 }
+                output.closeEntry()
+            }
+            addedEntries.toSortedMap().forEach { (entryName, entryBytes) ->
+                output.putNextEntry(ZipEntry(entryName))
+                output.write(entryBytes)
                 output.closeEntry()
             }
         }

@@ -8,7 +8,6 @@ import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.MainCoroutineDispatcher
 import kotlinx.coroutines.internal.MainDispatcherFactory
 import letmutex.compose.nativehost.NativeHostUiThread
-import letmutex.compose.nativehost.internal.MacOsComposeBridge
 
 internal class NativeHostMainDispatcherFactory : MainDispatcherFactory {
     override val loadPriority: Int = Int.MAX_VALUE
@@ -17,13 +16,7 @@ internal class NativeHostMainDispatcherFactory : MainDispatcherFactory {
         if (MacOsComposeBridge.isAvailable()) {
             return NativeHostMainDispatcher
         }
-        val fallbackFactory =
-            allFactories
-                .asSequence()
-                .filterNot { it === this }
-                .maxByOrNull { it.loadPriority }
-                ?: error("No fallback MainDispatcherFactory found")
-        return fallbackFactory.createDispatcher(allFactories.filterNot { it === this })
+        return ComposeHostSwingMainDispatcher
     }
 
     override fun hintOnError(): String =

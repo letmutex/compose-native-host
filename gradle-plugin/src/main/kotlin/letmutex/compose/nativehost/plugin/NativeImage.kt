@@ -392,12 +392,17 @@ private fun filterComposeUberJarForNativeImage(
     targetJar: File,
 ) {
     val resourceFilter = nativeImageHostResourceFilter()
+    val serviceEntryBytes = nativeHostMainDispatcherFactoryServiceContents()
     ZipFile(sourceJar).use { input ->
         ZipOutputStream(FileOutputStream(targetJar)).use { output ->
             val entries = input.entries()
             while (entries.hasMoreElements()) {
                 val entry = entries.nextElement()
-                if (entry.isDirectory || !resourceFilter.keep(entry.name)) {
+                if (
+                    entry.isDirectory ||
+                    entry.name == mainDispatcherFactoryServiceEntry ||
+                    !resourceFilter.keep(entry.name)
+                ) {
                     continue
                 }
                 val outputEntry =
@@ -410,6 +415,9 @@ private fun filterComposeUberJarForNativeImage(
                 input.getInputStream(entry).use { it.copyTo(output) }
                 output.closeEntry()
             }
+            output.putNextEntry(ZipEntry(mainDispatcherFactoryServiceEntry))
+            output.write(serviceEntryBytes)
+            output.closeEntry()
         }
     }
 }
