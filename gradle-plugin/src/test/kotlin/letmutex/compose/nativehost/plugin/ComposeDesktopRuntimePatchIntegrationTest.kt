@@ -38,6 +38,9 @@ class ComposeDesktopRuntimePatchIntegrationTest {
                 "org/jetbrains/skiko/Baz.class",
                 "keep/RuntimeKeep.class",
             ),
+            extraEntries = mapOf(
+                mainDispatcherFactoryServiceEntry to "stale.dispatcher.Factory\n",
+            ),
         )
         fixture.publishIvyModule(
             organisation = "org.jetbrains.compose.ui",
@@ -285,13 +288,14 @@ private class TestFixtureProject(
         version: String,
         jarName: String,
         classEntries: Set<String>,
+        extraEntries: Map<String, String> = emptyMap(),
     ) {
         val moduleDir =
             mavenRepoDir.resolve(group.replace('.', '/'))
                 .resolve(module)
                 .resolve(version)
         Files.createDirectories(moduleDir)
-        writeJar(moduleDir.resolve(jarName), classEntries)
+        writeJar(moduleDir.resolve(jarName), classEntries, extraEntries)
         moduleDir.resolve("$module-$version.pom").writeText(
             """
             <project xmlns="http://maven.apache.org/POM/4.0.0">
@@ -343,12 +347,18 @@ private class TestFixtureProject(
     private fun writeJar(
         jarPath: Path,
         classEntries: Set<String>,
+        extraEntries: Map<String, String> = emptyMap(),
     ) {
         jarPath.parent.createDirectories()
         ZipOutputStream(Files.newOutputStream(jarPath)).use { zip ->
             classEntries.sorted().forEach { entryName ->
                 zip.putNextEntry(ZipEntry(entryName))
                 zip.write(byteArrayOf(0))
+                zip.closeEntry()
+            }
+            extraEntries.toSortedMap().forEach { (entryName, contents) ->
+                zip.putNextEntry(ZipEntry(entryName))
+                zip.write(contents.toByteArray(Charsets.UTF_8))
                 zip.closeEntry()
             }
         }

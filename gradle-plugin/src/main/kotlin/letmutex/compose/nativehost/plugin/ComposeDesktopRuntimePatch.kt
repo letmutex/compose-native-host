@@ -1,6 +1,7 @@
 package letmutex.compose.nativehost.plugin
 
 import java.io.File
+import java.io.FileInputStream
 import java.security.MessageDigest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -55,6 +56,7 @@ fun registerPreparePatchedComposeDesktopRuntimeClasspathTask(
                 runtimeArtifacts.map { artifact ->
                     val inputJar = artifact.file
                     val outputJar = File(outputDir, artifact.stagedJarName())
+                    val fingerprint = inputJar.jarFingerprint()
                     val serviceEntries =
                         if (inputJar == runtimeJar) {
                             mapOf(mainDispatcherFactoryServiceEntry to nativeHostMainDispatcherFactoryServiceContents())
@@ -85,8 +87,8 @@ fun registerPreparePatchedComposeDesktopRuntimeClasspathTask(
                     StagedRuntimeArtifact(
                         originalJarName = inputJar.name,
                         stagedJarName = outputJar.name,
-                        packagedJarName = inputJar.packagedJarName(),
-                        originalJarMd5 = inputJar.md5Hex(),
+                        packagedJarName = fingerprint.packagedJarName,
+                        originalJarMd5 = fingerprint.md5Hex,
                     )
                 }
             mapFile.parentFile.mkdirs()
@@ -213,15 +215,27 @@ private fun copyJarUpdatingEntries(
     }
 }
 
-private fun File.packagedJarName(): String {
-    val hash = MessageDigest.getInstance("MD5").digest(readBytes()).toComposeDesktopHashString()
-    return "$nameWithoutExtension-$hash.jar"
-}
+private data class JarFingerprint(
+    val packagedJarName: String,
+    val md5Hex: String,
+)
 
-private fun File.md5Hex(): String =
-    MessageDigest.getInstance("MD5").digest(readBytes()).joinToString(separator = "") { byte ->
-        "%02x".format(byte)
+private fun File.jarFingerprint(): JarFingerprint {
+    val digest = MessageDigest.getInstance("MD5")
+    FileInputStream(this).use { input ->
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            digest.update(buffer, 0, read)
+        }
     }
+    val digestBytes = digest.digest()
+    return JarFingerprint(
+        packagedJarName = "$nameWithoutExtension-${digestBytes.toComposeDesktopHashString()}.jar",
+        md5Hex = digestBytes.joinToString(separator = "") { byte -> "%02x".format(byte) },
+    )
+}
 
 private fun ByteArray.toComposeDesktopHashString(): String =
     joinToString(separator = "") { byte ->
