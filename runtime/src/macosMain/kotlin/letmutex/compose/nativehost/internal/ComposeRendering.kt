@@ -44,7 +44,7 @@ internal class ComposeMetalRenderer(
     private val content: @Composable () -> Unit,
     private val coroutineContext: CoroutineContext = EmptyCoroutineContext,
 ) : AutoCloseable {
-    private val platformContext = ComposePlatformContext()
+    private val platformContext = ComposePlatformContext(hostBridge)
     private val renderThread = ComposeMetalRenderThread(hostBridge, renderFrameCallback)
     private var scene: ComposeScene? = null
     private var currentWindowInfo: WindowInfo? = null

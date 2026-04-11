@@ -8,7 +8,9 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
+import androidx.compose.ui.input.pointer.cursorTypeOrDefault
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.platform.PlatformContext
@@ -30,13 +32,19 @@ import kotlinx.coroutines.launch
 import kotlin.text.isISOControl
 
 @OptIn(InternalComposeUiApi::class)
-internal class ComposePlatformContext : PlatformContext by PlatformContext.Empty() {
+internal class ComposePlatformContext(
+    private val hostBridge: MacOsComposeBridge,
+) : PlatformContext by PlatformContext.Empty() {
     private val activeTextInputRequest = AtomicReference<PlatformTextInputMethodRequest?>(null)
     private val composeWindowInfo = ComposeWindowInfo()
     private var textInputGeometryListener: ((TextInputGeometry?) -> Unit)? = null
 
     override val windowInfo: ComposePlatformWindowInfo
         get() = composeWindowInfo
+
+    override fun setPointerIcon(pointerIcon: PointerIcon) {
+        hostBridge.setPointerIcon(pointerIcon.cursorTypeOrDefault())
+    }
 
     fun updateWindowInfo(windowInfo: WindowInfo) {
         composeWindowInfo.updateWindowInfo(windowInfo)

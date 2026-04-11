@@ -162,6 +162,16 @@ Java_letmutex_compose_nativehost_internal_MacOsComposeBridgeBindings_nativeHostR
 }
 
 JNIEXPORT void JNICALL
+Java_letmutex_compose_nativehost_internal_MacOsComposeBridgeBindings_nativeHostSetPointerIcon(
+    JNIEnv *env,
+    jobject self,
+    jlong runtimeId,
+    jint cursorType
+) {
+    nativeHostSetPointerIcon((int64_t)runtimeId, (int32_t)cursorType);
+}
+
+JNIEXPORT void JNICALL
 Java_letmutex_compose_nativehost_internal_MacOsComposeBridgeBindings_nativeHostEmitAppEvent(
     JNIEnv *env,
     jobject self,

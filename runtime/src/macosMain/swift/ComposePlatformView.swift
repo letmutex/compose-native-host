@@ -1,6 +1,21 @@
 import Cocoa
 import Foundation
 
+private let javaDefaultCursorType: Int32 = 0
+private let javaCrosshairCursorType: Int32 = 1
+private let javaTextCursorType: Int32 = 2
+private let javaWaitCursorType: Int32 = 3
+private let javaSouthwestResizeCursorType: Int32 = 4
+private let javaSoutheastResizeCursorType: Int32 = 5
+private let javaNorthwestResizeCursorType: Int32 = 6
+private let javaNortheastResizeCursorType: Int32 = 7
+private let javaNorthResizeCursorType: Int32 = 8
+private let javaSouthResizeCursorType: Int32 = 9
+private let javaWestResizeCursorType: Int32 = 10
+private let javaEastResizeCursorType: Int32 = 11
+private let javaHandCursorType: Int32 = 12
+private let javaMoveCursorType: Int32 = 13
+
 /// NSView that forwards pointer, keyboard, and IME input to the host.
 final class ComposePlatformView: NSView, NSTextInputClient {
     private var runtimeState: ComposeHostRuntimeState
@@ -9,6 +24,8 @@ final class ComposePlatformView: NSView, NSTextInputClient {
     private var markedTextValue: NSAttributedString?
     private var markedSelectionRange = NSRange(location: NSNotFound, length: 0)
     private var textInputGeometry = TextInputGeometryState()
+    private var pointerInside = false
+    private var currentCursor: NSCursor = .arrow
 
     init(
         frame frameRect: NSRect,
@@ -38,6 +55,11 @@ final class ComposePlatformView: NSView, NSTextInputClient {
     /// Ensures that the first click on an inactive window is delivered to Compose
     /// instead of being swallowed by AppKit for window activation.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: currentCursor)
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -106,10 +128,13 @@ final class ComposePlatformView: NSView, NSTextInputClient {
     }
 
     override func mouseEntered(with event: NSEvent) {
+        pointerInside = true
+        currentCursor.set()
         enqueuePointerEvent(type: pointerEventTypeEnter, event: event)
     }
 
     override func mouseExited(with event: NSEvent) {
+        pointerInside = false
         enqueuePointerEvent(type: pointerEventTypeExit, event: event)
     }
 
@@ -542,6 +567,14 @@ final class ComposePlatformView: NSView, NSTextInputClient {
         inputContext?.invalidateCharacterCoordinates()
     }
 
+    func setPointerIcon(_ cursorType: Int32) {
+        currentCursor = appKitCursor(for: cursorType)
+        window?.invalidateCursorRects(for: self)
+        if pointerInside {
+            currentCursor.set()
+        }
+    }
+
     private func imeFocusedRectInView() -> NSRect {
         let scale = backingScaleFactor()
         let left = textInputGeometry.focusedRectLeft / scale
@@ -575,6 +608,54 @@ final class ComposePlatformView: NSView, NSTextInputClient {
 
     private func backingScaleFactor() -> CGFloat {
         window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1.0
+    }
+
+    private func appKitCursor(for cursorType: Int32) -> NSCursor {
+        switch cursorType {
+        case javaCrosshairCursorType:
+            return .crosshair
+        case javaTextCursorType:
+            return .iBeam
+        case javaHandCursorType:
+            return .pointingHand
+        case javaMoveCursorType:
+            return .openHand
+        case javaSouthwestResizeCursorType,
+             javaSoutheastResizeCursorType,
+             javaNorthwestResizeCursorType,
+             javaNortheastResizeCursorType:
+            return frameResizeCursor(for: cursorType) ?? .arrow
+        case javaNorthResizeCursorType, javaSouthResizeCursorType:
+            return .resizeUpDown
+        case javaWestResizeCursorType, javaEastResizeCursorType:
+            return .resizeLeftRight
+        case javaWaitCursorType, javaDefaultCursorType:
+            return .arrow
+        default:
+            return .arrow
+        }
+    }
+
+    private func frameResizeCursor(for cursorType: Int32) -> NSCursor? {
+        guard #available(macOS 15.0, *) else {
+            return nil
+        }
+
+        let position: NSCursor.FrameResizePosition
+        switch cursorType {
+        case javaSouthwestResizeCursorType:
+            position = .bottomLeft
+        case javaSoutheastResizeCursorType:
+            position = .bottomRight
+        case javaNorthwestResizeCursorType:
+            position = .topLeft
+        case javaNortheastResizeCursorType:
+            position = .topRight
+        default:
+            return nil
+        }
+
+        return NSCursor.frameResize(position: position, directions: .all)
     }
 
     private struct CachedExternalDropPayload {

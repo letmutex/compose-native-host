@@ -3,6 +3,7 @@ package androidx.lifecycle
 import letmutex.compose.nativehost.NativeHostUiThread
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlin.coroutines.EmptyCoroutineContext
 
 internal object MainDispatcherChecker {
     @Volatile
@@ -12,12 +13,26 @@ internal object MainDispatcherChecker {
         if (mainDispatcherThread != null) {
             return true
         }
+        if (NativeHostUiThread.shared.isUiThread()) {
+            return true
+        }
+        if (isCurrentThreadMainImmediate()) {
+            mainDispatcherThread = Thread.currentThread()
+            return true
+        }
         synchronized(this) {
             if (mainDispatcherThread != null) {
                 return true
             }
+            if (NativeHostUiThread.shared.isUiThread()) {
+                return true
+            }
+            if (isCurrentThreadMainImmediate()) {
+                mainDispatcherThread = Thread.currentThread()
+                return true
+            }
             return try {
-                runBlocking(Dispatchers.Main.immediate) {
+                runBlocking(Dispatchers.Main) {
                     mainDispatcherThread = Thread.currentThread()
                 }
                 true
@@ -26,6 +41,11 @@ internal object MainDispatcherChecker {
             }
         }
     }
+
+    private fun isCurrentThreadMainImmediate(): Boolean =
+        runCatching {
+            !Dispatchers.Main.immediate.isDispatchNeeded(EmptyCoroutineContext)
+        }.getOrDefault(false)
 
     fun isMainDispatcherThread(): Boolean {
         if (NativeHostUiThread.shared.isUiThread()) {

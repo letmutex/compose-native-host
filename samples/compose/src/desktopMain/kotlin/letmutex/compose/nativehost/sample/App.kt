@@ -65,6 +65,7 @@ private enum class SamplePage(val title: String) {
     Scroll("Scroll"),
     DragDrop("DragDrop"),
     Links("Links"),
+    PatchedApis("Patched APIs"),
 }
 
 private data class SampleUiState(
@@ -322,6 +323,7 @@ private fun SamplePageSurface(
                         resizeHint = resizeHint,
                     )
 
+                    SamplePage.PatchedApis -> PatchedApisPage(onInteraction = onInteraction)
                     SamplePage.Links -> LinksPage()
                     SamplePage.Events -> EventsPage(onInteraction = onInteraction)
                     SamplePage.Windows -> WindowsPage(onInteraction = onInteraction)
