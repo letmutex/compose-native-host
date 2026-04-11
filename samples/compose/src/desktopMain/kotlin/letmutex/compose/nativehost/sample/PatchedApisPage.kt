@@ -6,13 +6,15 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -23,7 +25,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -32,17 +33,33 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerIconCrosshair
+import androidx.compose.ui.input.pointer.pointerIconDefault
+import androidx.compose.ui.input.pointer.pointerIconEastResize
+import androidx.compose.ui.input.pointer.pointerIconHand
+import androidx.compose.ui.input.pointer.pointerIconMove
+import androidx.compose.ui.input.pointer.pointerIconNortheastResize
+import androidx.compose.ui.input.pointer.pointerIconNorthResize
+import androidx.compose.ui.input.pointer.pointerIconNorthwestResize
+import androidx.compose.ui.input.pointer.pointerIconSouthResize
+import androidx.compose.ui.input.pointer.pointerIconSoutheastResize
+import androidx.compose.ui.input.pointer.pointerIconSouthwestResize
+import androidx.compose.ui.input.pointer.pointerIconText
+import androidx.compose.ui.input.pointer.pointerIconWait
+import androidx.compose.ui.input.pointer.pointerIconWestResize
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import letmutex.compose.nativehost.internal.MacOsComposeBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private val PatchedApisCardShape = RoundedCornerShape(22.dp)
 private val PatchedStatusShape = RoundedCornerShape(999.dp)
+private val PointerTestAreaShape = RoundedCornerShape(18.dp)
 
 private data class PatchedCheckStatus(
     val label: String,
@@ -50,9 +67,14 @@ private data class PatchedCheckStatus(
     val tint: Color,
 )
 
+private data class CursorPreview(
+    val label: String,
+    val icon: PointerIcon,
+)
+
 private val PendingStatus = PatchedCheckStatus("Not run", "Use the button on this card.", Color(0xFF78716C))
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun PatchedApisPage(
     onInteraction: (String) -> Unit,
@@ -72,6 +94,26 @@ internal fun PatchedApisPage(
             PendingStatus.copy(details = "Checks Dispatchers.Main.immediate and lifecycle's desktop override."),
         )
     }
+    val sharedLibraryRuntime = remember { MacOsComposeBridge.isSharedLibraryRuntime() }
+    val pointerPreviews =
+        remember(sharedLibraryRuntime) {
+            listOf(
+                CursorPreview("Default", pointerIconDefault),
+                CursorPreview("Hand", pointerIconHand),
+                CursorPreview("Text", pointerIconText),
+                CursorPreview("Crosshair", pointerIconCrosshair),
+                CursorPreview("Move", pointerIconMove),
+                CursorPreview("Wait", pointerIconWait),
+                CursorPreview("East resize", pointerIconEastResize),
+                CursorPreview("West resize", pointerIconWestResize),
+                CursorPreview("North resize", pointerIconNorthResize),
+                CursorPreview("South resize", pointerIconSouthResize),
+                CursorPreview("NE resize", pointerIconNortheastResize),
+                CursorPreview("NW resize", pointerIconNorthwestResize),
+                CursorPreview("SE resize", pointerIconSoutheastResize),
+                CursorPreview("SW resize", pointerIconSouthwestResize),
+            )
+        }
 
     val scrollState = rememberScrollState()
 
@@ -129,26 +171,22 @@ internal fun PatchedApisPage(
             summary = "Manual check for PointerIcon_desktopKt.",
         ) {
             Text(
-                text = "Hover the blue surface below. Expected cursor: hand.",
+                text =
+                    if (sharedLibraryRuntime) {
+                        "Hover each tile. Wait falls back to arrow; diagonal resize uses public AppKit on macOS 15+ and falls back to arrow on older macOS."
+                    } else {
+                        "Hover each tile to compare the standard desktop cursor mappings."
+                    },
                 color = Color(0xFF57534E),
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Surface(
-                modifier =
-                    Modifier.fillMaxWidth()
-                        .height(110.dp)
-                        .pointerHoverIcon(PointerIcon.Hand)
-                        .border(BorderStroke(1.dp, Color(0xFF93C5FD)), RoundedCornerShape(18.dp)),
-                color = Color(0xFF1D4ED8),
-                shape = RoundedCornerShape(18.dp),
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                    Text(
-                        text = "Hover this surface. Expected cursor: hand",
-                        color = Color.White,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                pointerPreviews.forEach { preview ->
+                    CursorPreviewTile(preview)
                 }
             }
         }
@@ -247,6 +285,29 @@ private fun PatchedStatus(
             text = status.details,
             color = Color(0xFF44403C),
             style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+@Composable
+private fun CursorPreviewTile(
+    preview: CursorPreview,
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Surface(
+            modifier =
+                Modifier.size(72.dp)
+                    .pointerHoverIcon(preview.icon)
+                    .border(BorderStroke(1.dp, Color(0xFF78716C)), PointerTestAreaShape),
+            color = Color(0xFFF1F5F9),
+            shape = PointerTestAreaShape,
+        ) { Box(modifier = Modifier.fillMaxSize()) }
+        Text(
+            text = preview.label,
+            color = Color(0xFF1C1917),
+            style = MaterialTheme.typography.labelMedium,
         )
     }
 }

@@ -283,7 +283,7 @@ fun configureBuildNativeBridge(
                     append(shellQuote("@rpath/${config.bridgeLibraryFile.name}"))
                     append(" -o ")
                     append(shellQuote(config.bridgeLibraryFile.absolutePath))
-                    append(" -framework Cocoa -framework Metal -framework JavaRuntimeSupport")
+                    append(" -framework Cocoa -framework Metal")
                 },
             )
         }

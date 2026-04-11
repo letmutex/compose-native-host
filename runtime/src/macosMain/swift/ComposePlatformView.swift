@@ -1,6 +1,5 @@
 import Cocoa
 import Foundation
-import JavaRuntimeSupport
 
 private let javaDefaultCursorType: Int32 = 0
 private let javaCrosshairCursorType: Int32 = 1
@@ -621,14 +620,11 @@ final class ComposePlatformView: NSView, NSTextInputClient {
             return .pointingHand
         case javaMoveCursorType:
             return .openHand
-        case javaSouthwestResizeCursorType:
-            return .javaResizeSW()
-        case javaSoutheastResizeCursorType:
-            return .javaResizeSE()
-        case javaNorthwestResizeCursorType:
-            return .javaResizeNW()
-        case javaNortheastResizeCursorType:
-            return .javaResizeNE()
+        case javaSouthwestResizeCursorType,
+             javaSoutheastResizeCursorType,
+             javaNorthwestResizeCursorType,
+             javaNortheastResizeCursorType:
+            return frameResizeCursor(for: cursorType) ?? .arrow
         case javaNorthResizeCursorType, javaSouthResizeCursorType:
             return .resizeUpDown
         case javaWestResizeCursorType, javaEastResizeCursorType:
@@ -638,6 +634,28 @@ final class ComposePlatformView: NSView, NSTextInputClient {
         default:
             return .arrow
         }
+    }
+
+    private func frameResizeCursor(for cursorType: Int32) -> NSCursor? {
+        guard #available(macOS 15.0, *) else {
+            return nil
+        }
+
+        let position: NSCursor.FrameResizePosition
+        switch cursorType {
+        case javaSouthwestResizeCursorType:
+            position = .bottomLeft
+        case javaSoutheastResizeCursorType:
+            position = .bottomRight
+        case javaNorthwestResizeCursorType:
+            position = .topLeft
+        case javaNortheastResizeCursorType:
+            position = .topRight
+        default:
+            return nil
+        }
+
+        return NSCursor.frameResize(position: position, directions: .all)
     }
 
     private struct CachedExternalDropPayload {
