@@ -5,6 +5,7 @@ import java.security.MessageDigest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
+import org.gradle.api.GradleException
 import org.gradle.api.artifacts.ResolvedArtifact
 import org.gradle.api.Project
 import org.gradle.api.Task
@@ -110,17 +111,26 @@ private fun String.sanitizeJarComponent(): String =
 
 private fun resolveNativeHostRuntimeJar(
     artifacts: List<ResolvedArtifact>,
-): File? =
-    artifacts
-        .asSequence()
-        .map { it.file }
-        .firstOrNull { jarContainsEntry(it, nativeHostRuntimeMarkerEntry) }
+): File {
+    val candidates =
+        artifacts
+            .asSequence()
+            .map { it.file }
+            .filter { jarContainsEntry(it, nativeHostRuntimeMarkerEntry) }
+            .toList()
+    if (candidates.size == 1) {
+        return candidates.single()
+    }
+    throw GradleException(
+        "Expected exactly one native host runtime jar containing $nativeHostRuntimeMarkerEntry, " +
+            "found ${candidates.size}: ${candidates.joinToString { it.name }}",
+    )
+}
 
 private fun collectPatchedRuntimeClassEntries(
-    runtimeJar: File?,
-): Set<String> {
-    runtimeJar ?: return emptySet()
-    return ZipFile(runtimeJar).use { zip ->
+    runtimeJar: File,
+): Set<String> =
+    ZipFile(runtimeJar).use { zip ->
         zip.entries().asSequence()
             .map(ZipEntry::getName)
             .filter { entryName ->
@@ -129,11 +139,10 @@ private fun collectPatchedRuntimeClassEntries(
             }
             .toCollection(linkedSetOf())
     }
-}
 
 private fun shouldStripPatchedRuntimeEntries(
     artifact: ResolvedArtifact,
-    runtimeJar: File?,
+    runtimeJar: File,
     patchedRuntimeEntries: Set<String>,
 ): Boolean =
     artifact.file != runtimeJar &&
@@ -141,7 +150,7 @@ private fun shouldStripPatchedRuntimeEntries(
         jarContainsAnyEntry(artifact.file, patchedRuntimeEntries)
 
 private fun ResolvedArtifact.coordinateKey(): String =
-    "${moduleVersion.id.group}:$name"
+    "${moduleVersion.id.group}:${moduleVersion.id.name}"
 
 private fun jarContainsAnyEntry(
     jarFile: File,

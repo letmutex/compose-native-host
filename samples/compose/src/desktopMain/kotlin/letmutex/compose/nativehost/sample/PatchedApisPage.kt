@@ -198,11 +198,10 @@ internal fun PatchedApisPage(
             Button(
                 onClick = {
                     coroutineScope.launch {
-                        val dispatcherThread =
+                        val (dispatcherThread, lifecycleMain) =
                             withContext(Dispatchers.Main.immediate) {
-                                Thread.currentThread().name
+                                Thread.currentThread().name to reflectLifecycleMainDispatcherThread()
                             }
-                        val lifecycleMain = reflectLifecycleMainDispatcherThread()
                         dispatcherStatus =
                             when (lifecycleMain) {
                                 true -> PatchedCheckStatus(

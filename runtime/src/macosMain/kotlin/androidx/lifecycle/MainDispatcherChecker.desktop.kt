@@ -14,7 +14,6 @@ internal object MainDispatcherChecker {
             return true
         }
         if (NativeHostUiThread.shared.isUiThread()) {
-            mainDispatcherThread = Thread.currentThread()
             return true
         }
         if (isCurrentThreadMainImmediate()) {
@@ -26,7 +25,6 @@ internal object MainDispatcherChecker {
                 return true
             }
             if (NativeHostUiThread.shared.isUiThread()) {
-                mainDispatcherThread = Thread.currentThread()
                 return true
             }
             if (isCurrentThreadMainImmediate()) {
