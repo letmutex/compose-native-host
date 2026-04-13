@@ -551,25 +551,21 @@ final class ComposeJvmHost {
             )
             return false
         }
-        let currentRuntimeArgs = [jvalue(l: runtimeRef)]
-        currentRuntimeArgs.withUnsafeBufferPointer { buffer in
-            callStaticVoidMethodA(
-                envRaw,
-                runtimeHandles.runtimeClass,
-                runtimeHandles.enterCurrentRuntimeMethod,
-                UnsafeRawPointer(buffer.baseAddress)
-            )
-        }
+        var currentRuntimeArgs = jvalue(l: runtimeRef)
+        callStaticVoidMethodA(
+            envRaw,
+            runtimeHandles.runtimeClass,
+            runtimeHandles.enterCurrentRuntimeMethod,
+            &currentRuntimeArgs
+        )
         let emptyArgs = newObjectArray(envRaw, 0, stringClass, nil)
-        let jargs = [jvalue(l: emptyArgs)]
-        jargs.withUnsafeBufferPointer { buffer in
-            callStaticVoidMethodA(
-                envRaw,
-                mainClassResolution.classRef,
-                mainMethod,
-                UnsafeRawPointer(buffer.baseAddress)
-            )
-        }
+        var mainArgs = jvalue(l: emptyArgs)
+        callStaticVoidMethodA(
+            envRaw,
+            mainClassResolution.classRef,
+            mainMethod,
+            &mainArgs
+        )
         callStaticVoidMethodA(envRaw, runtimeHandles.runtimeClass, runtimeHandles.exitCurrentRuntimeMethod, nil)
         let isContentBound = callBooleanMethodA(
             envRaw,
@@ -623,15 +619,13 @@ final class ComposeJvmHost {
                 break
             }
             let vsyncNanos = nextRenderVsyncNanos()
-            let renderArgs = [jvalue(j: Int64(bitPattern: vsyncNanos))]
-            renderArgs.withUnsafeBufferPointer { buffer in
-                callVoidMethodA(
-                    envRaw,
-                    runtimeRef,
-                    runtimeHandles.requestFrameMethod,
-                    UnsafeRawPointer(buffer.baseAddress)
-                )
-            }
+            var renderArgs = jvalue(j: Int64(bitPattern: vsyncNanos))
+            callVoidMethodA(
+                envRaw,
+                runtimeRef,
+                runtimeHandles.requestFrameMethod,
+                &renderArgs,
+            )
         }
 
         disposeRuntimeWithEnv(

@@ -175,6 +175,13 @@ Use `macosRun` for the staged JVM bundle or `macosNativeImageRun` for the staged
 - `samples/swiftui-min`: minimal SwiftUI-owned sample extracted from the setup shown above.
 - `samples/mixed`: AppKit-owned window with SwiftUI content composition around the hosted Compose surface.
 
+## Diagnostics
+
+Debugging environment variables:
+
+- `COMPOSE_NATIVE_HOST_FRAME_TIMINGS=1`: Enable logging of frame timings (dispatch delay, input drain, scene render, etc.) to stdout for performance analysis.
+- `COMPOSE_NATIVE_HOST_VSYNC_DELAY=1`: Enable analysis of VSync signal delivery delay from the display link to the Kotlin runtime.
+
 # How it works
 
 ### Host (Swift)
