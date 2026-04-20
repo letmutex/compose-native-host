@@ -34,6 +34,7 @@ compose.desktop {
         mainClass = "letmutex.compose.nativehost.sample.MainKt"
         nativeDistributions {
             targetFormats(TargetFormat.Dmg)
+            modules("jdk.unsupported")
             packageName = "ComposeNativeHostCompose"
             packageVersion = "1.0.0"
         }

@@ -38,6 +38,7 @@ compose.desktop {
         jvmArgs("-XstartOnFirstThread")
         nativeDistributions {
             targetFormats(TargetFormat.Dmg)
+            modules("jdk.unsupported")
             packageName = "ComposeNativeHostMixed"
             packageVersion = "1.0.0"
         }
