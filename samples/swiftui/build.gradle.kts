@@ -41,6 +41,7 @@ compose.desktop {
         jvmArgs("-XstartOnFirstThread")
         nativeDistributions {
             targetFormats(TargetFormat.Dmg)
+            modules("jdk.unsupported")
             packageName = "ComposeNativeHostSwiftUI"
             packageVersion = "1.0.0"
         }

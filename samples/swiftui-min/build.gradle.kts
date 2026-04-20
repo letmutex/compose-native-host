@@ -46,6 +46,7 @@ compose.desktop {
         }
         nativeDistributions {
             targetFormats(TargetFormat.Dmg)
+            modules("jdk.unsupported")
             packageName = composePackageName
             packageVersion = composePackageVersion
         }

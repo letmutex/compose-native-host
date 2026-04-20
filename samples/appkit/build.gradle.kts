@@ -41,6 +41,7 @@ compose.desktop {
         jvmArgs("-XstartOnFirstThread")
         nativeDistributions {
             targetFormats(TargetFormat.Dmg)
+            modules("jdk.unsupported")
             packageName = composePackageName
             packageVersion = composePackageVersion
         }

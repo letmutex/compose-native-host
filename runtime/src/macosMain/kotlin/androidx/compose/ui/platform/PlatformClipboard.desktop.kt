@@ -134,7 +134,7 @@ private fun shouldUseNativeHostClipboard(): Boolean {
 private suspend fun readNativeHostClipboardText(): String? =
     withContext(Dispatchers.IO) {
         try {
-            val process = ProcessBuilder("pbpaste").start()
+            val process = ProcessBuilder("pbpaste").withUtf8Locale().start()
             val output = process.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
             process.waitFor()
             output.ifEmpty { null }
@@ -146,7 +146,7 @@ private suspend fun readNativeHostClipboardText(): String? =
 private suspend fun writeNativeHostClipboardText(text: String): Boolean =
     withContext(Dispatchers.IO) {
         try {
-            val process = ProcessBuilder("pbcopy").start()
+            val process = ProcessBuilder("pbcopy").withUtf8Locale().start()
             process.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
                 writer.write(text)
             }
@@ -155,6 +155,30 @@ private suspend fun writeNativeHostClipboardText(text: String): Boolean =
             false
         }
     }
+
+private fun ProcessBuilder.withUtf8Locale(): ProcessBuilder =
+    apply {
+        val environment = environment()
+        val utf8Locale =
+            environment["LANG"]
+                ?.takeIf(::isUtf8Locale)
+                ?: "en_US.UTF-8"
+        environment["LANG"] = utf8Locale
+        if (!isUtf8Locale(environment["LC_ALL"])) {
+            environment.remove("LC_ALL")
+        }
+        if (!isUtf8Locale(environment["LC_CTYPE"])) {
+            environment["LC_CTYPE"] = utf8Locale
+        }
+    }
+
+private fun isUtf8Locale(value: String?): Boolean {
+    if (value.isNullOrBlank()) {
+        return false
+    }
+    val normalizedValue = value.uppercase()
+    return normalizedValue.endsWith("UTF-8") || normalizedValue.endsWith("UTF8")
+}
 
 private fun Transferable.readStringData(): String? {
     if (!isDataFlavorSupported(DataFlavor.stringFlavor)) {
