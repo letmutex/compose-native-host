@@ -134,7 +134,7 @@ private fun shouldUseNativeHostClipboard(): Boolean {
 private suspend fun readNativeHostClipboardText(): String? =
     withContext(Dispatchers.IO) {
         try {
-            val process = ProcessBuilder("pbpaste").start()
+            val process = ProcessBuilder("pbpaste").withUtf8Locale().start()
             val output = process.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
             process.waitFor()
             output.ifEmpty { null }
@@ -146,13 +146,22 @@ private suspend fun readNativeHostClipboardText(): String? =
 private suspend fun writeNativeHostClipboardText(text: String): Boolean =
     withContext(Dispatchers.IO) {
         try {
-            val process = ProcessBuilder("pbcopy").start()
+            val process = ProcessBuilder("pbcopy").withUtf8Locale().start()
             process.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
                 writer.write(text)
             }
             process.waitFor() == 0
         } catch (_: Exception) {
             false
+        }
+    }
+
+private fun ProcessBuilder.withUtf8Locale(): ProcessBuilder =
+    apply {
+        val environment = environment()
+        environment.putIfAbsent("LANG", "en_US.UTF-8")
+        if (!environment.containsKey("LC_ALL") && !environment.containsKey("LC_CTYPE")) {
+            environment["LC_CTYPE"] = "en_US.UTF-8"
         }
     }
 
