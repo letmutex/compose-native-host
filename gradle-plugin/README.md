@@ -2,11 +2,11 @@
 
 Gradle plugin id: `io.github.letmutex.compose.nativehost`
 
-This plugin builds and packages the macOS native host used by the Compose Native Host runtime. It supports:
+This plugin builds and packages the macOS and Windows native hosts used by the Compose Native Host runtime. It supports:
 
 - JVM-hosted app bundles
-- GraalVM shared-library hosted app bundles
-- Staged `.app` bundles for local runs
+- GraalVM shared-library hosted app bundles (macOS only)
+- Staged native app bundles for local runs (`.app` on macOS, executable folder on Windows)
 - Patched Compose Desktop distributables
 
 ## Documentation
@@ -84,6 +84,11 @@ composeNativeHost {
         )
     }
 
+    windows {
+        // Optional Windows launcher C++ sources dir. Defaults to "src/windowsMain/cpp".
+        launcherSourcesDir.set(layout.projectDirectory.dir("src/windowsMain/cpp"))
+    }
+
     nativeImage {
         // Required to enable native-image support.
         // Registers Kotlin top-level main classes into the generated Graal entrypoint switch.
@@ -151,11 +156,27 @@ If `bundleContent(..., runtimes = ...)` is omitted, the content is copied into b
 
 ## Main Tasks
 
-- `macosRun`: Launch the staged JVM-hosted native app bundle.
-- `macosNativeImageRun`: Launch the staged shared-library native app bundle.
-- `macosBundleInfo`: Print the staged JVM bundle path.
-- `macosNativeImageBundleInfo`: Print the staged shared-library bundle path.
-- `macosStageAppBundle`: Stage the JVM-hosted native app bundle.
-- `macosNativeImageStageAppBundle`: Stage the shared-library native app bundle.
+- `macosRun` / `windowsRun`: Launch the staged JVM-hosted native app bundle.
+- `macosNativeImageRun`: Launch the staged shared-library native app bundle (macOS only).
+- `macosBundleInfo` / `windowsBundleInfo`: Print the staged JVM bundle path.
+- `macosNativeImageBundleInfo`: Print the staged shared-library bundle path (macOS only).
+- `macosStageAppBundle` / `windowsStageAppBundle`: Stage the JVM-hosted native app bundle.
+- `macosNativeImageStageAppBundle`: Stage the shared-library native app bundle (macOS only).
+
+Windows support tasks compile the native launcher `.exe` and the bridge DLL using MSVC (`cl.exe`).
 
 Native-image support is only active when `nativeImage { mainClasses(...) }` is configured.
+
+## Windows Compiler Toolchain Configuration
+
+By default, the plugin automatically locates the MSVC compilation script `vcvars64.bat` using the Visual Studio installer helper `vswhere.exe`. If you run from an active Developer Command Prompt for VS where environment variables (`INCLUDE`, `LIB`) are already present, the plugin automatically detects it and bypasses locating `vcvars64.bat`.
+
+You can also explicitly specify the path to `vcvars64.bat` via:
+1. **Gradle project property**: Set `vcvars64Path` in your `gradle.properties`:
+   ```properties
+   vcvars64Path=C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat
+   ```
+2. **Environment variable**: Set `VCVARS64_PATH`:
+   ```bash
+   set VCVARS64_PATH=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat
+   ```

@@ -18,6 +18,7 @@ gradlePlugin {
 }
 
 val packageHostSources by tasks.registering(Zip::class) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     archiveFileName.set("native-host-sources.zip")
     destinationDirectory.set(layout.buildDirectory.dir("generated/resources"))
     from("../runtime/src/macosMain/swift") {
@@ -26,7 +27,15 @@ val packageHostSources by tasks.registering(Zip::class) {
     }
     from("../runtime/src/macosMain/native") {
         include("*.m", "*.h")
-        into("native")
+        into("native/macos")
+    }
+    from("../runtime/src/windowsMain/cpp") {
+        include("**/*.cpp", "**/*.h")
+        into("cpp")
+    }
+    from("../runtime/src/windowsMain/native") {
+        include("**/*.cpp", "**/*.h")
+        into("native/windows")
     }
 }
 

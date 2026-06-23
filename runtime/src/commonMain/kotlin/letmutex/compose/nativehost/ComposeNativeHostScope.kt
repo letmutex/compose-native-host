@@ -30,6 +30,18 @@ interface ComposeNativeHostHandle {
         name: String,
         payload: String? = null,
     )
+
+    /** Initiates a native window drag. */
+    fun performWindowDrag()
+
+    /** Minimizes the native window. */
+    fun minimizeWindow()
+
+    /** Maximizes or restores the native window. */
+    fun maximizeWindow()
+
+    /** Closes the native window. */
+    fun closeWindow()
 }
 
 internal class ComposeNativeHostHandleImpl(
@@ -41,12 +53,17 @@ internal class ComposeNativeHostHandleImpl(
     ) {
         eventDispatcher.sendEvent(name, payload)
     }
+
+    override fun performWindowDrag() = eventDispatcher.performWindowDrag()
+    override fun minimizeWindow() = eventDispatcher.minimizeWindow()
+    override fun maximizeWindow() = eventDispatcher.maximizeWindow()
+    override fun closeWindow() = eventDispatcher.closeWindow()
 }
 
 /**
  * Callback used by the host runtime to receive app events from Compose content.
  */
-internal fun interface ComposeNativeHostEventDispatcher {
+internal interface ComposeNativeHostEventDispatcher {
     /**
      * Delivers an app event emitted from hosted content.
      */
@@ -54,6 +71,11 @@ internal fun interface ComposeNativeHostEventDispatcher {
         name: String,
         payload: String?,
     )
+
+    fun performWindowDrag()
+    fun minimizeWindow()
+    fun maximizeWindow()
+    fun closeWindow()
 }
 
 internal class ComposeNativeHostScopeImpl(
@@ -62,6 +84,6 @@ internal class ComposeNativeHostScopeImpl(
     override val host: ComposeNativeHostHandle = ComposeNativeHostHandleImpl(eventDispatcher)
 
     override val windowInfo: MutableState<WindowInfo> =
-        WindowInfo(width = 0, height = 0, scale = 1f, refreshRate = 60, isFocused = true)
+        WindowInfo(width = 0, height = 0, scale = 1f, refreshRate = 60, isFocused = true, isMaximized = false)
             .let(::mutableStateOf)
 }

@@ -11,3 +11,9 @@ expect fun ComposeNativeHost(content: @Composable ComposeNativeHostScope.() -> U
  * Returns true when the current process can talk to the native host bridge.
  */
 expect fun isComposeNativeHostAvailable(): Boolean
+
+/**
+ * Returns true when running in a shared library environment.
+ */
+internal expect fun isComposeNativeHostSharedLibraryRuntime(): Boolean
+

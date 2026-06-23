@@ -21,18 +21,31 @@ internal fun patchComposeDesktopBundle(
     val appBundle = resolveComposeDistributableBundle(appDir) ?: return
 
     val packagedExecutableName = resolvePackagedExecutableName(appBundle)
-    val executableFile = File(appBundle, "Contents/MacOS/$packagedExecutableName")
-    launcherFile.copyTo(executableFile, overwrite = true)
+    val executableFile = if (hostOsPrefix == "windows") {
+        File(appBundle, packagedExecutableName)
+    } else {
+        File(appBundle, "Contents/MacOS/$packagedExecutableName")
+    }
+    launcherFile.copyToWithRetry(executableFile, overwrite = true)
     executableFile.setExecutable(true)
 
-    val bundledBridgeFile = File(appBundle, "Contents/Resources/native/${bundleConfig.nativeBridgeFile.name}")
+    val bundledBridgeFile = if (hostOsPrefix == "windows") {
+        File(appBundle, "native/bridge.dll")
+    } else {
+        File(appBundle, "Contents/Resources/native/${bundleConfig.nativeBridgeFile.name}")
+    }
     bundledBridgeFile.parentFile.mkdirs()
-    bundleConfig.nativeBridgeFile.copyTo(bundledBridgeFile, overwrite = true)
+    bundleConfig.nativeBridgeFile.copyToWithRetry(bundledBridgeFile, overwrite = true)
     bundledBridgeFile.setExecutable(true)
 
+    val targetResourcesDir = if (hostOsPrefix == "windows") {
+        File(appBundle, "app/resources")
+    } else {
+        File(appBundle, "Contents/Resources")
+    }
     copyDirectoryContents(
         sourceDir = bundleConfig.appResourcesDir,
-        targetDir = File(appBundle, "Contents/Resources"),
+        targetDir = targetResourcesDir,
     )
     if (runtimeMode == ComposeNativeHostTargetRuntime.Jvm) {
         replaceComposeDesktopRuntimeJars(
@@ -63,16 +76,23 @@ private fun resolveComposeDistributableBundle(
 ): File? {
     val appBundles =
         appDir.listFiles()
-            ?.filter { it.isDirectory && it.name.endsWith(".app") }
+            ?.filter { it.isDirectory && (if (hostOsPrefix == "windows") !it.name.startsWith(".") else it.name.endsWith(".app")) }
             .orEmpty()
     return when (appBundles.size) {
         0 -> null
         1 -> appBundles.single()
-        else -> throw GradleException("Expected one .app bundle in ${appDir.absolutePath}, found ${appBundles.size}.")
+        else -> throw GradleException("Expected one application folder in ${appDir.absolutePath}, found ${appBundles.size}.")
     }
 }
 
 private fun resolvePackagedExecutableName(appBundle: File): String {
+    if (hostOsPrefix == "windows") {
+        val exes = appBundle.listFiles()?.filter { it.isFile && it.extension.lowercase() == "exe" }.orEmpty()
+        if (exes.size == 1) {
+            return exes.single().name
+        }
+        return "${appBundle.name}.exe"
+    }
     val infoPlist = File(appBundle, "Contents/Info.plist")
     val contents = infoPlist.readText()
     val match =
@@ -88,7 +108,11 @@ private fun replaceComposeDesktopRuntimeJars(
     bundleConfig: NativeBundleConfig,
     appBundle: File,
 ) {
-    val packagedAppDir = File(appBundle, "Contents/app")
+    val packagedAppDir = if (hostOsPrefix == "windows") {
+        File(appBundle, "app")
+    } else {
+        File(appBundle, "Contents/app")
+    }
     val stagedArtifacts = readStagedRuntimeArtifacts(bundleConfig.patchedRuntimeClasspathMapFile)
     val packagedJarsByOriginalName = resolvePackagedRuntimeJarsByOriginalName(packagedAppDir, stagedArtifacts)
     stagedArtifacts.forEach { artifact ->
@@ -101,7 +125,7 @@ private fun replaceComposeDesktopRuntimeJars(
                 ?: throw GradleException(
                     "Could not resolve packaged runtime jar mapping for ${artifact.originalJarName} in ${packagedAppDir.absolutePath}.",
                 )
-        stagedJar.copyTo(packagedJar, overwrite = true)
+        stagedJar.copyToWithRetry(packagedJar, overwrite = true)
     }
 }
 
@@ -215,7 +239,7 @@ private fun readPackagedClasspathJarNames(
             if (value.isBlank()) {
                 null
             } else {
-                val jarName = value.substringAfterLast('/')
+                val jarName = value.replace('\\', '/').substringAfterLast('/')
                 if (jarName.endsWith(".jar")) {
                     File(packagedAppDir, jarName).absolutePath
                 } else {
@@ -234,7 +258,17 @@ private fun copyExtraBundleContents(
     (bundleConfig.extraBundleContents + additionalBundleContents)
         .filter { content -> content.supports(runtimeMode) }
         .forEach { content ->
-        val targetDir = File(appBundle, content.into)
+        val mappedInto = if (hostOsPrefix == "windows") {
+            when {
+                content.into.startsWith("Contents/Resources/native") -> "native"
+                content.into.startsWith("Contents/Resources") -> "app/resources"
+                content.into.startsWith("Contents/app") -> "app"
+                else -> content.into
+            }
+        } else {
+            content.into
+        }
+        val targetDir = File(appBundle, mappedInto)
         content.files.files.forEach { source ->
             if (!source.exists()) {
                 return@forEach
@@ -252,6 +286,9 @@ private fun patchRuntimeModeInfoPlist(
     appBundle: File,
     runtimeMode: ComposeNativeHostTargetRuntime,
 ) {
+    if (hostOsPrefix == "windows") {
+        return
+    }
     val infoPlist = File(appBundle, "Contents/Info.plist")
     val contents = infoPlist.readText()
     val patchedContents =
@@ -278,14 +315,23 @@ private fun patchRuntimeModeInfoPlist(
 }
 
 private fun removePackagedJvmRuntime(appBundle: File) {
-    val packagedAppDir = File(appBundle, "Contents/app")
+    val packagedAppDir = if (hostOsPrefix == "windows") {
+        File(appBundle, "app")
+    } else {
+        File(appBundle, "Contents/app")
+    }
     packagedAppDir.listFiles()?.forEach { child ->
         if (shouldKeepPackagedAppEntry(child)) {
             return@forEach
         }
         child.deleteRecursively()
     }
-    File(appBundle, "Contents/runtime").deleteRecursively()
+    val runtimeDir = if (hostOsPrefix == "windows") {
+        File(appBundle, "runtime")
+    } else {
+        File(appBundle, "Contents/runtime")
+    }
+    runtimeDir.deleteRecursively()
 }
 
 private fun shouldKeepPackagedAppEntry(file: File): Boolean {
@@ -310,7 +356,7 @@ private fun copyBundleContent(
     }
     targetDir.mkdirs()
     val targetFile = File(targetDir, source.name)
-    source.copyTo(targetFile, overwrite = true)
+    source.copyToWithRetry(targetFile, overwrite = true)
     if (executable) {
         targetFile.setExecutable(true)
     }
@@ -333,7 +379,7 @@ private fun copyDirectoryContents(
                 target.mkdirs()
             } else {
                 target.parentFile.mkdirs()
-                source.copyTo(target, overwrite = true)
+                source.copyToWithRetry(target, overwrite = true)
                 if (executable) {
                     target.setExecutable(true)
                 }
@@ -347,3 +393,30 @@ private fun xmlUnescape(value: String): String =
         .replace("&gt;", ">")
         .replace("&lt;", "<")
         .replace("&amp;", "&")
+
+private fun File.copyToWithRetry(target: File, overwrite: Boolean = false, maxRetries: Int = 10, delayMillis: Long = 200) {
+    var lastException: Exception? = null
+    for (i in 1..maxRetries) {
+        try {
+            if (overwrite && target.exists()) {
+                target.setWritable(true)
+                if (!target.delete() && target.exists()) {
+                    val tempTarget = File(target.parentFile, "${target.name}.delete-me-${System.nanoTime()}")
+                    if (target.renameTo(tempTarget)) {
+                        try {
+                            tempTarget.delete()
+                        } catch (e: Exception) {
+                            tempTarget.deleteOnExit()
+                        }
+                    }
+                }
+            }
+            this.copyTo(target, overwrite = overwrite)
+            return
+        } catch (e: Exception) {
+            lastException = e
+            Thread.sleep(delayMillis)
+        }
+    }
+    throw lastException ?: java.io.IOException("Failed to copy ${this.absolutePath} to ${target.absolutePath} after $maxRetries attempts")
+}

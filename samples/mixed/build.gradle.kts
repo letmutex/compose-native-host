@@ -8,13 +8,31 @@ plugins {
     id("org.jetbrains.compose")
 }
 
+val hostOs = when {
+    System.getProperty("os.name").lowercase().contains("win") -> "windows"
+    System.getProperty("os.name").lowercase().contains("mac") -> "macos"
+    else -> "desktop"
+}
+
 kotlin {
-    jvm("desktop")
+    jvm(hostOs)
 
     sourceSets {
-        val desktopMain by getting {
+        val commonMain by getting
+        val desktopMain by creating {
+            dependsOn(commonMain)
             dependencies {
                 implementation(project(":compose"))
+            }
+        }
+        if (hostOs == "windows") {
+            val windowsMain by getting {
+                dependsOn(desktopMain)
+            }
+        }
+        if (hostOs == "macos") {
+            val macosMain by getting {
+                dependsOn(desktopMain)
             }
         }
     }
@@ -25,6 +43,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>().configureEa
 }
 
 composeNativeHost {
+    jvmTargetName.set(hostOs)
     appName.set("Compose Native Host Mixed")
     bundleIdentifier.set("letmutex.compose.nativehost.sample.mixed")
     nativeImage {
@@ -37,11 +56,16 @@ compose.desktop {
         mainClass = "letmutex.compose.nativehost.sample.HostedMainKt"
         jvmArgs("-XstartOnFirstThread")
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg)
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi)
             modules("jdk.unsupported")
             packageName = "ComposeNativeHostMixed"
             packageVersion = "1.0.0"
+            windows {
+                shortcut = true
+                menu = true
+            }
         }
         buildTypes.release.proguard { isEnabled.set(false) }
     }
 }
+

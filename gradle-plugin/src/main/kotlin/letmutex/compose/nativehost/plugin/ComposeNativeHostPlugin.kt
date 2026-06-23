@@ -52,6 +52,7 @@ private fun configureTasksAfterEvaluate(
             taskProvider = buildNativeBridge,
             extractTask = extractTask,
             generateJvmArgsSwiftSource = generateJvmArgsSwiftSource,
+            buildNativeLauncher = buildNativeLauncher,
         )
         configureJvmBundleTasks(
             project = project,
@@ -267,12 +268,38 @@ private fun registerNativeDistributableTasks(
         project.tasks.named(spec.wrapperTaskName).configure {
             dependsOn(patchTask)
             spec.composeTaskName.takeIf { it != spec.createTaskName }?.let { composeTaskName ->
-                dependsOn(composeTaskName)
+                dependsOn(project.tasks.matching { it.name == composeTaskName })
             }
         }
         spec.composeTaskName.takeIf { it != spec.createTaskName }?.let { composeTaskName ->
             project.tasks.matching { it.name == composeTaskName }.configureEach {
                 mustRunAfter(patchTask)
+                try {
+                    val appImageProp = this.javaClass.getMethod("getAppImage").invoke(this) as org.gradle.api.file.DirectoryProperty
+                    appImageProp.set(project.layout.dir(project.provider {
+                        val isNativeImage = project.gradle.taskGraph.allTasks.any { it.name.contains("native-image", ignoreCase = true) }
+                        val isRelease = project.gradle.taskGraph.allTasks.any { it.name.contains("Release", ignoreCase = true) }
+                        val buildFolder = if (isRelease) "main-release" else "main"
+                        val appDir = project.layout.buildDirectory.dir("compose/binaries/$buildFolder/app").get().asFile
+                        val appBundles = appDir.listFiles()
+                            ?.filter { it.isDirectory && (if (hostOsPrefix == "windows") !it.name.startsWith(".") else it.name.endsWith(".app")) }
+                            .orEmpty()
+                        if (appBundles.size == 1) {
+                            appBundles.single()
+                        } else {
+                            val guessedName = spec.wrapperTaskName
+                                .removePrefix("windows-native-image")
+                                .removePrefix("windows")
+                                .removePrefix("PackageRelease")
+                                .removePrefix("Package")
+                                .substringBefore("MSI")
+                                .substringBefore("DMG")
+                            File(appDir, guessedName)
+                        }
+                    }))
+                } catch (e: Exception) {
+                    // Ignore if task doesn't support appImage (reflection fallback)
+                }
             }
         }
     }
@@ -306,122 +333,75 @@ private data class NativeDistributableSpec(
     val description: String,
 )
 
-private val jvmDistributableSpecs =
-    listOf(
+private fun buildDistributableSpecs(runtime: ComposeNativeHostTargetRuntime): List<NativeDistributableSpec> {
+    val prefix = if (runtime == ComposeNativeHostTargetRuntime.Jvm) hostOsPrefix else "$hostOsPrefix-native-image"
+    val isWindows = hostOsPrefix == "windows"
+    val packageTask = if (isWindows) "packageMsi" else "packageDmg"
+    val packageReleaseTask = if (isWindows) "packageReleaseMsi" else "packageReleaseDmg"
+    val packageDesc = if (isWindows) "MSI" else "DMG"
+
+    return listOf(
         NativeDistributableSpec(
             createTaskName = "createDistributable",
-            patchTaskName = "macosPatchDistributable",
+            patchTaskName = "${prefix}PatchDistributable",
             composeTaskName = "createDistributable",
-            wrapperTaskName = "macosCreateDistributable",
+            wrapperTaskName = "${prefix}CreateDistributable",
             description = "Builds the Compose Desktop distributable and applies the Compose Native Host patch.",
         ),
         NativeDistributableSpec(
             createTaskName = "createReleaseDistributable",
-            patchTaskName = "macosPatchReleaseDistributable",
+            patchTaskName = "${prefix}PatchReleaseDistributable",
             composeTaskName = "createReleaseDistributable",
-            wrapperTaskName = "macosCreateReleaseDistributable",
+            wrapperTaskName = "${prefix}CreateReleaseDistributable",
             description = "Builds the release distributable and applies the Compose Native Host patch.",
         ),
         NativeDistributableSpec(
             createTaskName = "createDistributable",
-            patchTaskName = "macosPatchDistributable",
-            composeTaskName = "packageDmg",
-            wrapperTaskName = "macosPackageDmg",
-            description = "Packages a DMG from the native-host-patched Compose Desktop distributable.",
+            patchTaskName = "${prefix}PatchDistributable",
+            composeTaskName = packageTask,
+            wrapperTaskName = "${prefix}Package$packageDesc",
+            description = "Packages a $packageDesc from the native-host-patched Compose Desktop distributable.",
         ),
         NativeDistributableSpec(
             createTaskName = "createReleaseDistributable",
-            patchTaskName = "macosPatchReleaseDistributable",
-            composeTaskName = "packageReleaseDmg",
-            wrapperTaskName = "macosPackageReleaseDmg",
-            description = "Packages a release DMG from the native-host-patched Compose Desktop distributable.",
+            patchTaskName = "${prefix}PatchReleaseDistributable",
+            composeTaskName = packageReleaseTask,
+            wrapperTaskName = "${prefix}PackageRelease$packageDesc",
+            description = "Packages a release $packageDesc from the native-host-patched Compose Desktop distributable.",
         ),
         NativeDistributableSpec(
             createTaskName = "createDistributable",
-            patchTaskName = "macosPatchDistributable",
+            patchTaskName = "${prefix}PatchDistributable",
             composeTaskName = "packageDistributionForCurrentOS",
-            wrapperTaskName = "macosPackageDistributionForCurrentOS",
+            wrapperTaskName = "${prefix}PackageDistributionForCurrentOS",
             description = "Packages the current OS distributable from the native-host-patched Compose Desktop app.",
         ),
         NativeDistributableSpec(
             createTaskName = "createReleaseDistributable",
-            patchTaskName = "macosPatchReleaseDistributable",
+            patchTaskName = "${prefix}PatchReleaseDistributable",
             composeTaskName = "packageReleaseDistributionForCurrentOS",
-            wrapperTaskName = "macosPackageReleaseDistributionForCurrentOS",
+            wrapperTaskName = "${prefix}PackageReleaseDistributionForCurrentOS",
             description = "Packages the current OS release distributable from the native-host-patched Compose Desktop app.",
         ),
         NativeDistributableSpec(
             createTaskName = "createDistributable",
-            patchTaskName = "macosPatchDistributable",
+            patchTaskName = "${prefix}PatchDistributable",
             composeTaskName = "runDistributable",
-            wrapperTaskName = "macosRunDistributable",
+            wrapperTaskName = "${prefix}RunDistributable",
             description = "Runs the native-host-patched Compose Desktop distributable.",
         ),
         NativeDistributableSpec(
             createTaskName = "createReleaseDistributable",
-            patchTaskName = "macosPatchReleaseDistributable",
+            patchTaskName = "${prefix}PatchReleaseDistributable",
             composeTaskName = "runReleaseDistributable",
-            wrapperTaskName = "macosRunReleaseDistributable",
+            wrapperTaskName = "${prefix}RunReleaseDistributable",
             description = "Runs the native-host-patched release distributable.",
         ),
     )
+}
 
-private val nativeImageDistributableSpecs =
-    listOf(
-        NativeDistributableSpec(
-            createTaskName = "createDistributable",
-            patchTaskName = "macosNativeImagePatchDistributable",
-            composeTaskName = "createDistributable",
-            wrapperTaskName = "macosNativeImageCreateDistributable",
-            description = "Builds the Compose Desktop distributable and applies the native-image Compose Native Host patch.",
-        ),
-        NativeDistributableSpec(
-            createTaskName = "createReleaseDistributable",
-            patchTaskName = "macosNativeImagePatchReleaseDistributable",
-            composeTaskName = "createReleaseDistributable",
-            wrapperTaskName = "macosNativeImageCreateReleaseDistributable",
-            description = "Builds the release distributable and applies the native-image Compose Native Host patch.",
-        ),
-        NativeDistributableSpec(
-            createTaskName = "createDistributable",
-            patchTaskName = "macosNativeImagePatchDistributable",
-            composeTaskName = "packageDmg",
-            wrapperTaskName = "macosNativeImagePackageDmg",
-            description = "Packages a DMG from the native-image Compose Native Host distributable.",
-        ),
-        NativeDistributableSpec(
-            createTaskName = "createReleaseDistributable",
-            patchTaskName = "macosNativeImagePatchReleaseDistributable",
-            composeTaskName = "packageReleaseDmg",
-            wrapperTaskName = "macosNativeImagePackageReleaseDmg",
-            description = "Packages a release DMG from the native-image Compose Native Host distributable.",
-        ),
-        NativeDistributableSpec(
-            createTaskName = "createDistributable",
-            patchTaskName = "macosNativeImagePatchDistributable",
-            composeTaskName = "packageDistributionForCurrentOS",
-            wrapperTaskName = "macosNativeImagePackageDistributionForCurrentOS",
-            description = "Packages the current OS native-image Compose Native Host distributable.",
-        ),
-        NativeDistributableSpec(
-            createTaskName = "createReleaseDistributable",
-            patchTaskName = "macosNativeImagePatchReleaseDistributable",
-            composeTaskName = "packageReleaseDistributionForCurrentOS",
-            wrapperTaskName = "macosNativeImagePackageReleaseDistributionForCurrentOS",
-            description = "Packages the current OS release native-image Compose Native Host distributable.",
-        ),
-        NativeDistributableSpec(
-            createTaskName = "createDistributable",
-            patchTaskName = "macosNativeImagePatchDistributable",
-            composeTaskName = "runDistributable",
-            wrapperTaskName = "macosNativeImageRunDistributable",
-            description = "Runs the native-image Compose Native Host distributable.",
-        ),
-        NativeDistributableSpec(
-            createTaskName = "createReleaseDistributable",
-            patchTaskName = "macosNativeImagePatchReleaseDistributable",
-            composeTaskName = "runReleaseDistributable",
-            wrapperTaskName = "macosNativeImageRunReleaseDistributable",
-            description = "Runs the release native-image Compose Native Host distributable.",
-        ),
-    )
+private val jvmDistributableSpecs: List<NativeDistributableSpec>
+    get() = buildDistributableSpecs(ComposeNativeHostTargetRuntime.Jvm)
+
+private val nativeImageDistributableSpecs: List<NativeDistributableSpec>
+    get() = buildDistributableSpecs(ComposeNativeHostTargetRuntime.SharedLibrary)

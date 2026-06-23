@@ -48,17 +48,20 @@ data class NativeImageExperimentConfig(
 private const val sharedLibraryBindMainSymbol = "composeNativeHostRuntimeBindMain"
 
 internal enum class NativeImageSharedLibraryFlavor(
-    val taskName: String,
+    val taskSuffix: String,
     val description: String,
 ) {
     Dev(
-        taskName = "macosNativeImageBuildSharedLibrary",
+        taskSuffix = "NativeImageBuildSharedLibrary",
         description = "Builds the hosted app shared library for staged native-image runs.",
     ),
     Bundle(
-        taskName = "macosNativeImageBuildBundleSharedLibrary",
+        taskSuffix = "NativeImageBuildBundleSharedLibrary",
         description = "Builds the hosted app shared library for patched distributables.",
-    ),
+    );
+
+    val taskName: String
+        get() = "$hostOsPrefix$taskSuffix"
 }
 
 fun createNativeImageExperimentConfig(
@@ -69,6 +72,7 @@ fun createNativeImageExperimentConfig(
     val sharedLibraryBaseName =
         nativeImage.sharedLibraryBaseName.requireValue("composeNativeHost.nativeImage.sharedLibraryBaseName")
     val mainClasses = resolveNativeImageMainClasses(extension)
+    val sharedLibSuffix = if (hostOsPrefix == "windows") ".dll" else ".dylib"
     return NativeImageExperimentConfig(
         helperMainClass = generatedNativeImageHelperMainClass(project),
         mainClasses = mainClasses,
@@ -93,7 +97,7 @@ fun createNativeImageExperimentConfig(
             ).get().asFile,
         devSharedLibraryFile =
             project.layout.buildDirectory.file(
-                "native-image-shared/dev/$sharedLibraryBaseName.dylib",
+                "native-image-shared/dev/$sharedLibraryBaseName$sharedLibSuffix",
             ).get().asFile,
         devSharedLibraryOutputDir = project.layout.buildDirectory.dir("native-image-shared/dev").get().asFile,
         devExtraBuildArgs = nativeImage.devExtraBuildArgs.get(),
@@ -103,7 +107,7 @@ fun createNativeImageExperimentConfig(
             ).get().asFile,
         bundleSharedLibraryFile =
             project.layout.buildDirectory.file(
-                "native-image-shared/bundle/$sharedLibraryBaseName.dylib",
+                "native-image-shared/bundle/$sharedLibraryBaseName$sharedLibSuffix",
             ).get().asFile,
         bundleSharedLibraryOutputDir = project.layout.buildDirectory.dir("native-image-shared/bundle").get().asFile,
         bundleExtraBuildArgs = nativeImage.bundleExtraBuildArgs.get(),
@@ -121,7 +125,7 @@ fun registerNativeImageGenerateInteropJavaTask(
     project: Project,
     config: NativeImageExperimentConfig,
 ): TaskProvider<Task> =
-    project.tasks.register("macosNativeImageGenerateInteropJava") {
+    project.tasks.register("${hostOsPrefix}NativeImageGenerateInteropJava") {
         group = "build"
         description = "Generates GraalVM shared-library entrypoints for the hosted app."
         inputs.property("composeNativeHostNativeImageMainClasses", config.mainClasses)
@@ -139,7 +143,7 @@ fun registerNativeImageFilterComposeUberJarTask(
     project: Project,
     config: NativeImageExperimentConfig,
 ): TaskProvider<Task> =
-    project.tasks.register("macosNativeImageFilterComposeUberJar") {
+    project.tasks.register("${hostOsPrefix}NativeImageFilterComposeUberJar") {
         group = "build"
         description = "Creates a host-only classpath jar for Compose Native Host native-image builds."
         dependsOn("packageUberJarForCurrentOS")
@@ -162,7 +166,7 @@ fun registerNativeImageCompileInteropJavaTask(
     filterComposeUberJar: TaskProvider<Task>,
 ): TaskProvider<Exec> {
     val classesDir = project.layout.buildDirectory.dir("graal-interop/classes").get().asFile
-    return project.tasks.register("macosNativeImageCompileInteropJava", Exec::class.java) {
+    return project.tasks.register("${hostOsPrefix}NativeImageCompileInteropJava", Exec::class.java) {
         group = "build"
         description = "Compiles GraalVM shared-library entrypoints for the hosted app."
         dependsOn(filterComposeUberJar, generateInteropJava)
@@ -206,7 +210,7 @@ fun registerNativeImageInteropJarTask(
     compileInteropJava: TaskProvider<Exec>,
 ): TaskProvider<Jar> {
     val classesDir = project.layout.buildDirectory.dir("graal-interop/classes").get().asFile
-    return project.tasks.register("macosNativeImageInteropJar", Jar::class.java) {
+    return project.tasks.register("${hostOsPrefix}NativeImageInteropJar", Jar::class.java) {
         group = "build"
         description = "Packages GraalVM shared-library entrypoints for the hosted app."
         dependsOn(compileInteropJava)
@@ -222,7 +226,7 @@ fun registerNativeImageGenerateJniConfigTask(
     config: NativeImageExperimentConfig,
     filterComposeUberJar: TaskProvider<Task>,
 ): TaskProvider<Task> =
-    project.tasks.register("macosNativeImageGenerateJniConfig") {
+    project.tasks.register("${hostOsPrefix}NativeImageGenerateJniConfig") {
         group = "build"
         description = "Generates JNI metadata for the GraalVM shared-library experiment."
         dependsOn(filterComposeUberJar)
@@ -435,6 +439,18 @@ private fun nativeImageHostResourceFilter(): NativeImageHostResourceFilter {
                         "aarch64", "arm64" -> setOf("aarch64", "arm64")
                         "amd64", "x86_64" -> setOf("amd64", "x64", "x86_64")
                         else -> throw GradleException("Unsupported macOS arch for Compose Native Host native-image filtering: ${System.getProperty("os.arch")}")
+                    },
+            )
+
+        osName.contains("win") ->
+            NativeImageHostResourceFilter(
+                hostLibrarySuffixes = setOf(".dll"),
+                hostOsTokens = setOf("win", "windows"),
+                hostArchTokens =
+                    when (osArch) {
+                        "aarch64", "arm64" -> setOf("aarch64", "arm64")
+                        "amd64", "x64", "x86_64" -> setOf("amd64", "x64", "x86_64")
+                        else -> throw GradleException("Unsupported Windows arch for Compose Native Host native-image filtering: ${System.getProperty("os.arch")}")
                     },
             )
 

@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -42,10 +44,15 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import letmutex.compose.nativehost.ComposeNativeHostScope
+import letmutex.compose.nativehost.DraggableArea
+import letmutex.compose.nativehost.LocalComposeNativeHostHandle
 import letmutex.compose.nativehost.WindowInfo
+import letmutex.compose.nativehost.WindowsControlButtons
 
 const val SamplePageSelectedEvent = "sample.page.selected"
 const val SampleOpenWindowEvent = "sample.window.open"
@@ -119,7 +126,7 @@ fun SampleApp(
             modifier = Modifier.fillMaxSize(),
             color = Color(0xFFF4EFE6),
         ) {
-            Box(
+            Column(
                 modifier =
                     Modifier.fillMaxSize()
                         .focusRequester(focusRequester)
@@ -133,10 +140,26 @@ fun SampleApp(
                             ),
                         ),
             ) {
+                val host = LocalComposeNativeHostHandle.current
+                // Native title-bar: draggable region with OS window controls on the right
+                DraggableArea(
+                    modifier = Modifier.fillMaxWidth().height(32.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Spacer(Modifier.weight(1f))
+                        WindowsControlButtons()
+                    }
+                }
+
+                // Main scrollable content
                 Column(
                     modifier =
                         Modifier.fillMaxSize()
-                            .padding(horizontal = 56.dp, vertical = 40.dp),
+                            .padding(horizontal = 56.dp)
+                            .padding(bottom = 40.dp),
                     horizontalAlignment = Alignment.Start,
                     verticalArrangement = Arrangement.Top,
                 ) {

@@ -7,23 +7,43 @@ plugins {
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.maven.publish)
 }
-
 kotlin {
-    jvm("desktop")
+    val hostOs = when {
+        System.getProperty("os.name").lowercase().contains("win") -> "windows"
+        System.getProperty("os.name").lowercase().contains("mac") -> "macos"
+        else -> "desktop"
+    }
+
+    jvm(hostOs)
 
     sourceSets {
         val commonMain by getting {
             dependencies {
                 implementation(libs.compose.runtime)
                 implementation(libs.compose.ui)
+                implementation(libs.compose.foundation)
                 implementation(libs.jctools.core)
             }
         }
-        val macosMain by creating {
+        val desktopMain by creating {
             dependsOn(commonMain)
         }
-        val desktopMain by getting {
-            dependsOn(macosMain)
+        if (hostOs == "windows") {
+            val windowsMain by getting {
+                dependsOn(desktopMain)
+                dependencies {
+                    implementation("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.9.37.4")
+                }
+            }
+        }
+        if (hostOs == "macos") {
+            val macosMain by getting {
+                dependsOn(desktopMain)
+                dependencies {
+                    implementation("org.jetbrains.skiko:skiko-awt-runtime-macos-x64:0.9.37.4")
+                    implementation("org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.9.37.4")
+                }
+            }
         }
 
         val commonTest by getting {
@@ -32,8 +52,18 @@ kotlin {
             }
         }
 
-        val desktopTest by getting {
+        val desktopTest by creating {
             dependsOn(commonTest)
+        }
+        if (hostOs == "windows") {
+            val windowsTest by getting {
+                dependsOn(desktopTest)
+            }
+        }
+        if (hostOs == "macos") {
+            val macosTest by getting {
+                dependsOn(desktopTest)
+            }
         }
     }
 }

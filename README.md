@@ -1,5 +1,5 @@
 <h1 align="center">Compose Native Host</h1>
-<p align="center">Compose in native macOS window</p>
+<p align="center">Compose in native macOS and Windows windows</p>
 <p align="center">
   <a href="https://central.sonatype.com/artifact/io.github.letmutex.compose-native-host/runtime">
     <img alt="Maven Central Version" src="https://img.shields.io/maven-central/v/io.github.letmutex.compose-native-host/runtime?label=Maven%20Central&style=flat-square">
@@ -14,8 +14,8 @@
 ## Why go native?
 
 - You own the entry point. Compose is just a view in your native window
-- Embed Compose view in AppKit, SwiftUI, or both
-- Smooth scrolling, smooth window resizing. Sorry AWT
+- Embed Compose view in AppKit, SwiftUI, Win32, or custom native UI
+- Smooth scrolling and smooth window resizing on both macOS (Metal) and Windows (D3D12). Sorry AWT
 - Built-in GraalVM native image support. Sorry AWT, again
 - Multi-window and multi-runtime support
 - Android-inspired profile frame rendering
@@ -25,6 +25,7 @@
 
 - [docs/kotlin-runtime-api.md](./docs/kotlin-runtime-api.md): Kotlin runtime API snapshot
 - [docs/swift-runtime-api.md](./docs/swift-runtime-api.md): Swift runtime API snapshot
+- [docs/windows-support.md](./docs/windows-support.md): Windows support architecture, setup, and compile details
 - [gradle-plugin/README.md](./gradle-plugin/README.md): Gradle plugin configuration and task reference
 
 ## Minimal SwiftUI Setup
@@ -140,29 +141,33 @@ Use `.jvm` so the same host still runs without a bundled shared library, and add
 
 ## Run App
 
-Use `macosRun` for the staged JVM bundle or `macosNativeImageRun` for the staged native image bundle.
+Use `macosRun` or `windowsRun` for the staged JVM application. On macOS, you can also use `macosNativeImageRun` for the staged native image bundle.
 
 ```bash
+# macOS JVM run
 ./gradlew -p samples :appkit:macosRun
 
-# run the native image bundle
+# Windows JVM run
+./gradlew -p samples :mixed:windowsRun
+
+# macOS native image run
 ./gradlew -p samples :appkit:macosNativeImageRun
 ```
 
 ## Bundle App
 
 ```bash
-# build JVM / native image .app
+# build JVM .app / Windows staged bundle
 ./gradlew -p samples :appkit:macosCreateDistributable
-./gradlew -p samples :appkit:macosNativeImageCreateDistributable
+./gradlew -p samples :mixed:windowsCreateDistributable
 
-# package JVM / native image .dmg
+# package JVM .dmg / Windows MSI
 ./gradlew -p samples :appkit:macosPackageDmg
-./gradlew -p samples :appkit:macosNativeImagePackageDmg
+./gradlew -p samples :mixed:windowsPackageMsi
 
-# package JVM / native image release .dmg
+# package JVM release .dmg / Windows release MSI
 ./gradlew -p samples :appkit:macosPackageReleaseDmg
-./gradlew -p samples :appkit:macosNativeImagePackageReleaseDmg
+./gradlew -p samples :mixed:windowsPackageReleaseMsi
 ```
 
 ## Modules
@@ -184,37 +189,37 @@ Debugging environment variables:
 
 # How it works
 
-### Host (Swift)
-You own the App entry point in **Swift**. Your app's Swift sources (e.g., in `src/macosMain/swift`) define the AppKit/SwiftUI lifecycle. The plugin compiles these along with shared runtime helpers into the final native binary.
+### Host (Swift / C++)
+You own the native App entry point in **Swift** (macOS) or **C++** (Windows). Your app's native sources (e.g., in `src/macosMain/swift` or `src/windowsMain/cpp`) define the lifecycle, window creation, and message/event loop.
 
-### Runtime (Kotlin & Swift)
+### Runtime (Kotlin, Swift & C++)
 *   **Kotlin**: Manages the Compose state, layout, and logic. Uses **Skiko** for Skia rendering bindings.
-*   **Swift**: Provides the native macOS host API (`ComposeHostRuntime`, `ComposeView`). These Swift sources are bundled inside the Gradle plugin and extracted during the build to be compiled into your app.
+*   **Swift / C++**: Provides the native host APIs. These native sources are bundled inside the Gradle plugin and extracted during the build to be compiled into your app.
 
-### Bridge (JNI/Obj C)
-A thin Objective C bridge handles low level JNI communication between the Kotlin JVM/Native Image and the Swift host.
+### Bridge (JNI / Obj C / C++)
+A thin bridge layer (Objective C on macOS, C++ on Windows) handles low-level JNI communication between the native host and the Kotlin JVM or GraalVM runtime.
 
-### Renderer (Metal)
-Rendering is performed directly on the **GPU via Metal**. The runtime uses a custom renderer that bypasses AWT/Swing, ensuring smooth synchronization with macOS window resizing and animations.
+### Renderer (Metal / Direct3D 12)
+Rendering is performed directly on the **GPU via Metal (macOS) or Direct3D 12 (Windows)**. The custom renderer bypasses AWT/Swing, ensuring smooth synchronization with window resizing and animations.
 
 ### Plugin (The Orchestrator)
 The Gradle plugin automates the complex **native build pipeline**. It:
-1. Extracts internal Swift/Native sources.
-2. Compiles both runtime and app swift sources using `swiftc` and `clang`.
-3. Bundles the native bridge library (`.dylib`) and launcher into the `.app` bundle.
-4. Optionally triggers **GraalVM Native Image** for high performance native binaries.
+1. Extracts internal Swift/C++/Native sources.
+2. Compiles native launcher and bridge libraries using `swiftc` (macOS) or MSVC `cl.exe` (Windows).
+3. Bundles the native bridge library (`.dylib` / `.dll`) and launcher into the app bundle/folder.
+4. Optionally triggers **GraalVM Native Image** (macOS only) for high-performance native binaries.
 
 ### Runtime modes
 *   **JVM**: Standard Kotlin/JVM JARs are packaged and launched by the native host using a bundled JVM.
-*   **Native**: Kotlin code is compiled into a standalone shared library via GraalVM, allowing for instant startup and reduced memory overhead.
+*   **Native** (macOS only): Kotlin code is compiled into a standalone shared library via GraalVM, allowing for instant startup and reduced memory overhead.
 
 ### Simplified Render Path
 
 ```text
-+---------------+          +--------------+          +----------------+          +-----------+
-|   Swift App   | --(1)--> | Bridge Layer | --(2)--> | Kotlin Runtime | --(3)--> | Metal GPU |
-| (Entry Point) |          | (JNI / C-API)|          | (JVM / Native) |          | (Texture) |
-+---------------+          +--------------+          +----------------+          +-----------+
++-------------------+          +--------------+          +----------------+          +-------------+
+|  Native App Host  | --(1)--> | Bridge Layer | --(2)--> | Kotlin Runtime | --(3)--> | GPU Texture |
+| (Swift / C++ Win) |          | (JNI / C-API)|          | (JVM / Native) |          | (Metal/D3D) |
++-------------------+          +--------------+          +----------------+          +-------------+
 ```
 
 # License

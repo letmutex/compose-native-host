@@ -141,6 +141,7 @@ class NativeHostUiThread(
 
     private fun runLoop() {
         ready.countDown()
+
         while (running.get()) {
             try {
                 availableTasks.acquire()
