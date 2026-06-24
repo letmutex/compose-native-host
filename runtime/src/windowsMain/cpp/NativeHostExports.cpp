@@ -227,7 +227,10 @@ EXPORT int32_t nativeHostWaitForWindowAttached(int64_t runtimeId) {
     // Wait until window attaches
     while (true) {
         auto state = HostJvm::Get().GetRuntime(runtimeId);
-        if (state && state->hwnd != nullptr) {
+        if (!state || !state->isRunning) {
+            return 0;
+        }
+        if (state->hwnd != nullptr) {
             return 1;
         }
         Sleep(10);

@@ -6,6 +6,14 @@
 #include <algorithm>
 #include <thread>
 
+static std::string WideToUtf8(const std::wstring& wstr) {
+    if (wstr.empty()) return "";
+    int size_needed = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), NULL, 0, NULL, NULL);
+    std::string strUtf8(size_needed, 0);
+    WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), &strUtf8[0], size_needed, NULL, NULL);
+    return strUtf8;
+}
+
 HostJvm& HostJvm::Get() {
     static HostJvm instance;
     return instance;
@@ -63,15 +71,21 @@ std::vector<std::string> HostJvm::LoadBundledJvmConfig(const std::wstring& appDi
         exeName = exeName.substr(0, lastDot);
     }
 
-    std::wstring configFile = appDir + L"\\" + exeName + L".cfg";
+    std::wstring cfgAppDir = appDir + L"\\app";
+    std::wstring configFile = cfgAppDir + L"\\" + exeName + L".cfg";
     std::ifstream file(configFile);
     if (!file.is_open()) {
-        return javaOptions;
+        cfgAppDir = appDir;
+        configFile = cfgAppDir + L"\\" + exeName + L".cfg";
+        file.open(configFile);
+        if (!file.is_open()) {
+            return javaOptions;
+        }
     }
 
     std::string line;
     std::vector<std::string> classpathEntries;
-    std::string appDirUtf8(appDir.begin(), appDir.end());
+    std::string appDirUtf8 = WideToUtf8(cfgAppDir);
 
     while (std::getline(file, line)) {
         // Strip carriage returns or spaces
@@ -142,7 +156,7 @@ std::string HostJvm::ResolveClasspath() {
     if (hFind != INVALID_HANDLE_VALUE) {
         do {
             std::wstring jarPath = libDir + L"\\" + findData.cFileName;
-            std::string jarPathUtf8(jarPath.begin(), jarPath.end());
+            std::string jarPathUtf8 = WideToUtf8(jarPath);
             if (!classpath.empty()) classpath += ";";
             classpath += jarPathUtf8;
         } while (FindNextFileW(hFind, &findData));
@@ -171,15 +185,13 @@ std::string HostJvm::ResolveBridgePath() {
     std::wstring dllPath = exeDir + L"\\native\\bridge.dll";
     DWORD attribs = GetFileAttributesW(dllPath.c_str());
     if (attribs != INVALID_FILE_ATTRIBUTES) {
-        std::string dllPathUtf8(dllPath.begin(), dllPath.end());
-        return dllPathUtf8;
+        return WideToUtf8(dllPath);
     }
 
     dllPath = exeDir + L"\\bridge.dll";
     attribs = GetFileAttributesW(dllPath.c_str());
     if (attribs != INVALID_FILE_ATTRIBUTES) {
-        std::string dllPathUtf8(dllPath.begin(), dllPath.end());
-        return dllPathUtf8;
+        return WideToUtf8(dllPath);
     }
 
     return "";
