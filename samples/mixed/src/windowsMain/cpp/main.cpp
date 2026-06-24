@@ -18,6 +18,7 @@ struct SampleWindow {
 
 std::vector<std::shared_ptr<SampleWindow>> g_ActiveWindows;
 HINSTANCE g_hInstance = nullptr;
+bool g_IsComposeInitialized = false;
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 void CreateSampleWindow();
@@ -88,6 +89,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         ComposeHostConfiguration hostConfig;
         hostConfig.enableLogging = true;
         if (ComposeHostInitialize(hostConfig)) {
+            g_IsComposeInitialized = true;
             // Tell the main thread to create the compose runtimes
             for (auto& window : g_ActiveWindows) {
                 PostMessageW(window->hwnd, WM_INIT_COMPOSE, 0, 0);
@@ -155,6 +157,10 @@ void CreateSampleWindow() {
 
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
+    
+    if (g_IsComposeInitialized) {
+        PostMessageW(hwnd, WM_INIT_COMPOSE, 0, 0);
+    }
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
