@@ -112,8 +112,8 @@ Use a GraalVM JDK that already has `native-image` available under `bin/`.
 Environment
 
 - Set one of `-PgraalvmHome=/path/to/graalvm`, `GRAALVM_HOME=/path/to/graalvm`, `org.gradle.java.home=/path/to/graalvm`, or `JAVA_HOME=/path/to/graalvm`.
-- `macosNativeImageRun` and the native image bundle tasks use that GraalVM home directly.
-- Plain `macosRun` still uses a regular JVM launch path.
+- `macosNativeImageRun`, `windowsNativeImageRun` and the native image bundle tasks use that GraalVM home directly.
+- Plain `macosRun` and `windowsRun` still use a regular JVM launch path.
 
 Gradle
 
@@ -141,7 +141,7 @@ Use `.jvm` so the same host still runs without a bundled shared library, and add
 
 ## Run App
 
-Use `macosRun` or `windowsRun` for the staged JVM application. On macOS, you can also use `macosNativeImageRun` for the staged native image bundle.
+Use `macosRun` or `windowsRun` for the staged JVM application. On macOS and Windows, you can also use `macosNativeImageRun` or `windowsNativeImageRun` for the staged native image bundle.
 
 ```bash
 # macOS JVM run
@@ -152,6 +152,9 @@ Use `macosRun` or `windowsRun` for the staged JVM application. On macOS, you can
 
 # macOS native image run
 ./gradlew -p samples :appkit:macosNativeImageRun
+
+# Windows native image run
+./gradlew -p samples :mixed:windowsNativeImageRun
 ```
 
 ## Bundle App
@@ -161,13 +164,25 @@ Use `macosRun` or `windowsRun` for the staged JVM application. On macOS, you can
 ./gradlew -p samples :appkit:macosCreateDistributable
 ./gradlew -p samples :mixed:windowsCreateDistributable
 
+# build Native Image .app / Windows Native Image staged bundle
+./gradlew -p samples :appkit:macosNativeImageCreateDistributable
+./gradlew -p samples :mixed:windowsNativeImageCreateDistributable
+
 # package JVM .dmg / Windows MSI
 ./gradlew -p samples :appkit:macosPackageDmg
 ./gradlew -p samples :mixed:windowsPackageMsi
 
+# package Native Image .dmg / Windows Native Image MSI
+./gradlew -p samples :appkit:macosNativeImagePackageDmg
+./gradlew -p samples :mixed:windowsNativeImagePackageMsi
+
 # package JVM release .dmg / Windows release MSI
 ./gradlew -p samples :appkit:macosPackageReleaseDmg
 ./gradlew -p samples :mixed:windowsPackageReleaseMsi
+
+# package Native Image release .dmg / Windows Native Image release MSI
+./gradlew -p samples :appkit:macosNativeImagePackageReleaseDmg
+./gradlew -p samples :mixed:windowsNativeImagePackageReleaseMsi
 ```
 
 ## Modules
@@ -207,11 +222,11 @@ The Gradle plugin automates the complex **native build pipeline**. It:
 1. Extracts internal Swift/C++/Native sources.
 2. Compiles native launcher and bridge libraries using `swiftc` (macOS) or MSVC `cl.exe` (Windows).
 3. Bundles the native bridge library (`.dylib` / `.dll`) and launcher into the app bundle/folder.
-4. Optionally triggers **GraalVM Native Image** (macOS only) for high-performance native binaries.
+4. Optionally triggers **GraalVM Native Image** for high-performance native binaries.
 
 ### Runtime modes
 *   **JVM**: Standard Kotlin/JVM JARs are packaged and launched by the native host using a bundled JVM.
-*   **Native** (macOS only): Kotlin code is compiled into a standalone shared library via GraalVM, allowing for instant startup and reduced memory overhead.
+*   **Native**: Kotlin code is compiled into a standalone shared library via GraalVM, allowing for instant startup and reduced memory overhead.
 
 ### Simplified Render Path
 
