@@ -21,5 +21,6 @@ internal val ComposeNativeHostTargetRuntime.taskPrefix: String
     get() =
         when (this) {
             ComposeNativeHostTargetRuntime.Jvm -> hostOsPrefix
-            ComposeNativeHostTargetRuntime.SharedLibrary -> "$hostOsPrefix-native-image"
+            ComposeNativeHostTargetRuntime.SharedLibrary -> "${hostOsPrefix}NativeImage"
         }
+

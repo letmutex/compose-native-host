@@ -54,6 +54,9 @@ internal fun patchComposeDesktopBundle(
         )
     } else {
         removePackagedJvmRuntime(appBundle)
+        if (hostOsPrefix == "windows") {
+            patchWindowsCfgForSharedLibrary(appBundle, additionalBundleContents)
+        }
     }
     copyExtraBundleContents(
         bundleConfig = bundleConfig,
@@ -420,3 +423,25 @@ private fun File.copyToWithRetry(target: File, overwrite: Boolean = false, maxRe
     }
     throw lastException ?: java.io.IOException("Failed to copy ${this.absolutePath} to ${target.absolutePath} after $maxRetries attempts")
 }
+
+private fun patchWindowsCfgForSharedLibrary(
+    appBundle: File,
+    additionalBundleContents: List<ComposeNativeHostBundleContent>
+) {
+    val packagedAppDir = File(appBundle, "app")
+    val cfgFiles = packagedAppDir.listFiles()?.filter { it.isFile && it.extension == "cfg" }.orEmpty()
+    val cfgFile = cfgFiles.firstOrNull() ?: return
+    val lines = cfgFile.readLines().toMutableList()
+    
+    val runtimeModeIndex = lines.indexOfFirst { it.startsWith("runtime.mode=") }
+    val dllFile = additionalBundleContents.firstOrNull()?.files?.firstOrNull { it.name.endsWith(".dll") }
+    val dllName = dllFile?.name ?: "libcompose-native-host-runtime.dll"
+    
+    if (runtimeModeIndex == -1) {
+        lines.add(0, "[Runtime]")
+        lines.add(1, "runtime.mode=sharedLibrary")
+        lines.add(2, "runtime.library=native/$dllName")
+    }
+    cfgFile.writeText(lines.joinToString("\n"))
+}
+

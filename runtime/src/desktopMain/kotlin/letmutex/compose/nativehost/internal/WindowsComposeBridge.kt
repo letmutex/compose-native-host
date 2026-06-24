@@ -209,11 +209,32 @@ internal object WindowsNativeBridgeLoader {
                 return available
             }
             available = runCatching {
-                val explicitPath =
+                var explicitPath =
                     System.getProperty(BRIDGE_PATH_PROPERTY)
                         ?.takeIf { it.isNotBlank() }
                         ?: System.getenv(BRIDGE_PATH_ENV)
                             ?.takeIf { it.isNotBlank() }
+                if (explicitPath == null) {
+                    // Under GraalVM Native Image (sharedLibrary runtime mode on Windows), system properties and environment 
+                    // variables are typically not passed or resolved automatically. Fall back to locating bridge.dll relative
+                    // to the running host process's executable path.
+                    val command = ProcessHandle.current().info().command().orElse(null)
+                    if (command != null) {
+                        val exeFile = java.io.File(command)
+                        val exeDir = exeFile.parentFile
+                        if (exeDir != null) {
+                            val nativeBridge = java.io.File(exeDir, "native/bridge.dll")
+                            if (nativeBridge.exists()) {
+                                explicitPath = nativeBridge.absolutePath
+                            } else {
+                                val flatBridge = java.io.File(exeDir, "bridge.dll")
+                                if (flatBridge.exists()) {
+                                    explicitPath = flatBridge.absolutePath
+                                }
+                            }
+                        }
+                    }
+                }
                 if (explicitPath != null) {
                     System.load(explicitPath)
                     WindowsComposeBridgeBindings.nativeHostBridgeAvailable()

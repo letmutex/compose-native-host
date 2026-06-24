@@ -210,8 +210,10 @@ EXPORT int32_t nativeHostIsRunning(void) {
     return 1;
 }
 
+extern bool g_useSharedLibraryRuntime;
+
 EXPORT int32_t nativeHostUsesSharedLibraryRuntime(void) {
-    return 0; // JVM runtime mode, not Graal Native Image
+    return g_useSharedLibraryRuntime ? 1 : 0;
 }
 
 EXPORT void nativeHostWaitForShutdown(void) {

@@ -74,6 +74,7 @@ struct RuntimeState {
     std::mutex lock;
     std::condition_variable cv;
     jobject jvmRuntimeRef = nullptr;
+    int64_t graalRuntimeHandle = 0;
 
     // Running flag and thread for this runtime
     bool isRunning = true;
@@ -143,3 +144,37 @@ private:
     jmethodID handleExternalDragEndedMethod_ = nullptr;
     jmethodID handleExternalDropMethod_ = nullptr;
 };
+
+struct GraalThreadAttachment {
+    void* thread;
+    bool detachOnExit;
+};
+
+typedef void(*composeNativeHostRuntimeInitialize_t)(void*, int64_t);
+typedef void(*composeNativeHostRuntimeInitializeNoId_t)(void*);
+typedef int32_t(*composeNativeHostRuntimeHandleExternalDrop_t)(
+    void*,
+    int64_t,
+    int32_t,
+    int32_t,
+    int32_t,
+    int32_t,
+    int64_t,
+    const char**,
+    int32_t,
+    const char*,
+    const char*,
+    int32_t,
+    const char*
+);
+
+extern bool g_useSharedLibraryRuntime;
+extern composeNativeHostRuntimeHandleExternalDrop_t fn_composeNativeHostRuntimeHandleExternalDragEntered;
+extern composeNativeHostRuntimeHandleExternalDrop_t fn_composeNativeHostRuntimeHandleExternalDragMoved;
+extern composeNativeHostRuntimeInitialize_t fn_composeNativeHostRuntimeHandleExternalDragExited;
+extern composeNativeHostRuntimeInitialize_t fn_composeNativeHostRuntimeHandleExternalDragEnded;
+extern composeNativeHostRuntimeHandleExternalDrop_t fn_composeNativeHostRuntimeHandleExternalDrop;
+
+GraalThreadAttachment GetOrAttachThread();
+void DetachThread(const GraalThreadAttachment& attachment);
+

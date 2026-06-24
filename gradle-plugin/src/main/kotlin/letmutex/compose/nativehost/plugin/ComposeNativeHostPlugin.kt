@@ -294,18 +294,20 @@ private fun registerNativeDistributableTasks(
                 try {
                     val appImageProp = this.javaClass.getMethod("getAppImage").invoke(this) as org.gradle.api.file.DirectoryProperty
                     appImageProp.set(project.layout.dir(project.provider {
-                        val isNativeImage = project.gradle.taskGraph.allTasks.any { it.name.contains("native-image", ignoreCase = true) }
+                        val isNativeImage = project.gradle.taskGraph.allTasks.any {
+                            it.name.contains("native-image", ignoreCase = true) || it.name.contains("nativeImage", ignoreCase = true)
+                        }
                         val isRelease = project.gradle.taskGraph.allTasks.any { it.name.contains("Release", ignoreCase = true) }
                         val buildFolder = if (isRelease) "main-release" else "main"
                         val appDir = project.layout.buildDirectory.dir("compose/binaries/$buildFolder/app").get().asFile
                         val appBundles = appDir.listFiles()
-                            ?.filter { it.isDirectory && (if (hostOsPrefix == "windows") !it.name.startsWith(".") else it.name.endsWith(".app")) }
+                             ?.filter { it.isDirectory && (if (hostOsPrefix == "windows") !it.name.startsWith(".") else it.name.endsWith(".app")) }
                             .orEmpty()
                         if (appBundles.size == 1) {
                             appBundles.single()
                         } else {
                             val guessedName = spec.wrapperTaskName
-                                .removePrefix("windows-native-image")
+                                .removePrefix("windowsNativeImage")
                                 .removePrefix("windows")
                                 .removePrefix("PackageRelease")
                                 .removePrefix("Package")
@@ -351,7 +353,7 @@ private data class NativeDistributableSpec(
 )
 
 private fun buildDistributableSpecs(runtime: ComposeNativeHostTargetRuntime): List<NativeDistributableSpec> {
-    val prefix = if (runtime == ComposeNativeHostTargetRuntime.Jvm) hostOsPrefix else "$hostOsPrefix-native-image"
+    val prefix = runtime.taskPrefix
     val isWindows = hostOsPrefix == "windows"
     val packageTask = if (isWindows) "packageMsi" else "packageDmg"
     val packageReleaseTask = if (isWindows) "packageReleaseMsi" else "packageReleaseDmg"

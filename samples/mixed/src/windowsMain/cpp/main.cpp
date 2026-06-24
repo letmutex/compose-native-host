@@ -88,6 +88,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     std::thread([]() {
         ComposeHostConfiguration hostConfig;
         hostConfig.enableLogging = true;
+        hostConfig.startups = {
+            ComposeRuntimeStartup::Jvm(),
+            ComposeRuntimeStartup::SharedLibrary()
+        };
         if (ComposeHostInitialize(hostConfig)) {
             g_IsComposeInitialized = true;
             // Tell the main thread to create the compose runtimes

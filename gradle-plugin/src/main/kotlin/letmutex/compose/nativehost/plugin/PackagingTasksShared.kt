@@ -120,7 +120,7 @@ fun registerNativeImageBundleInfoTask(
             } else {
                 extension.macos.bundleName.requireValue("composeNativeHost.macos.bundleName")
             }
-            val bundleDir = project.layout.buildDirectory.dir("native-app/${hostOsPrefix}-native-image/$bundleName").get().asFile
+            val bundleDir = project.layout.buildDirectory.dir("native-app/${hostOsPrefix}NativeImage/$bundleName").get().asFile
             println(bundleDir.absolutePath)
         }
     }
@@ -256,6 +256,13 @@ fun configureStageNativeAppBundle(
                 configFile.parentFile.mkdirs()
                 configFile.writeText(
                     buildString {
+                        if (runtimeMode == ComposeNativeHostTargetRuntime.SharedLibrary) {
+                            appendLine("[Runtime]")
+                            appendLine("runtime.mode=sharedLibrary")
+                            val dllFile = additionalBundleContents.firstOrNull()?.files?.firstOrNull { it.name.endsWith(".dll") }
+                            val dllName = dllFile?.name ?: "libcompose-native-host-runtime.dll"
+                            appendLine("runtime.library=native/$dllName")
+                        }
                         appendLine("[JavaOptions]")
                         appendLine("java-options=-Dcompose.native.host.bridge.path=\$APPDIR\\native\\bridge.dll")
                         bundleConfig.jvmArgs.forEach { arg ->

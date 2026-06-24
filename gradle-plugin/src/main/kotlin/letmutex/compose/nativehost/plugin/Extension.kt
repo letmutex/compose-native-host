@@ -113,7 +113,7 @@ abstract class ComposeNativeHostNativeImageExtension
             )
             includeResourcePatterns.value(
                 listOf(
-                    "libskiko-.*\\.sha256",
+                    ".*skiko-.*\\.sha256",
                     "composeResources/.*",
                 ),
             )

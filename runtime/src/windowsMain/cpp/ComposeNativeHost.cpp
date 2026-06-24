@@ -4,12 +4,150 @@
 #include <windowsx.h>
 #include <atomic>
 #include <iostream>
+#include <fstream>
+#include <sstream>
+#include <algorithm>
+#include <thread>
 #include <imm.h>
+
+bool g_useSharedLibraryRuntime = false;
+
+// ============================================================================
+// GraalVM C-API Function Pointers
+// These function pointers map to the `@CEntryPoint` functions exported by
+// `RuntimeNativeLibrary.kt` during the GraalVM native image compilation.
+// They are dynamically resolved at runtime if the shared library mode is active.
+// ============================================================================
+
+typedef jint(JNICALL *graal_create_isolate_t)(void*, void**, void**);
+typedef jint(JNICALL *graal_attach_thread_t)(void*, void**);
+typedef void*(JNICALL *graal_get_current_thread_t)(void*);
+typedef jint(JNICALL *graal_detach_thread_t)(void*);
+
+typedef int64_t(*composeNativeHostRuntimeCreate_t)(void*, int64_t, int32_t);
+typedef int32_t(*composeNativeHostRuntimeBindMain_t)(void*, int64_t, const char*);
+typedef int32_t(*composeNativeHostRuntimeStart_t)(void*, int64_t);
+typedef void(*composeNativeHostRuntimeRequestFrame_t)(void*, int64_t, int64_t);
+typedef void(*composeNativeHostRuntimeClose_t)(void*, int64_t);
+
+static graal_create_isolate_t fn_graal_create_isolate = nullptr;
+static graal_attach_thread_t fn_graal_attach_thread = nullptr;
+static graal_get_current_thread_t fn_graal_get_current_thread = nullptr;
+static graal_detach_thread_t fn_graal_detach_thread = nullptr;
+
+static composeNativeHostRuntimeInitializeNoId_t fn_composeNativeHostRuntimeInitialize = nullptr;
+static composeNativeHostRuntimeCreate_t fn_composeNativeHostRuntimeCreate = nullptr;
+static composeNativeHostRuntimeBindMain_t fn_composeNativeHostRuntimeBindMain = nullptr;
+static composeNativeHostRuntimeStart_t fn_composeNativeHostRuntimeStart = nullptr;
+static composeNativeHostRuntimeRequestFrame_t fn_composeNativeHostRuntimeRequestFrame = nullptr;
+static composeNativeHostRuntimeClose_t fn_composeNativeHostRuntimeClose = nullptr;
+
+composeNativeHostRuntimeHandleExternalDrop_t fn_composeNativeHostRuntimeHandleExternalDragEntered = nullptr;
+composeNativeHostRuntimeHandleExternalDrop_t fn_composeNativeHostRuntimeHandleExternalDragMoved = nullptr;
+composeNativeHostRuntimeInitialize_t fn_composeNativeHostRuntimeHandleExternalDragExited = nullptr;
+composeNativeHostRuntimeInitialize_t fn_composeNativeHostRuntimeHandleExternalDragEnded = nullptr;
+composeNativeHostRuntimeHandleExternalDrop_t fn_composeNativeHostRuntimeHandleExternalDrop = nullptr;
+
+static HMODULE g_GraalDll = nullptr;
+static void* g_GraalIsolate = nullptr;
+
+static std::string WideToUtf8(const std::wstring& wstr) {
+    if (wstr.empty()) return "";
+    int size_needed = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), NULL, 0, NULL, NULL);
+    std::string strUtf8(size_needed, 0);
+    WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), &strUtf8[0], size_needed, NULL, NULL);
+    return strUtf8;
+}
+
+static std::wstring Utf8ToWide(const std::string& str) {
+    if (str.empty()) return L"";
+    int size_needed = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), NULL, 0);
+    std::wstring wstrTo(size_needed, 0);
+    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), &wstrTo[0], size_needed);
+    return wstrTo;
+}
+
+GraalThreadAttachment GetOrAttachThread() {
+    if (!g_GraalIsolate || !fn_graal_get_current_thread || !fn_graal_attach_thread) {
+        return { nullptr, false };
+    }
+    void* currentThread = fn_graal_get_current_thread(g_GraalIsolate);
+    if (currentThread) {
+        return { currentThread, false };
+    }
+    void* attachedThread = nullptr;
+    if (fn_graal_attach_thread(g_GraalIsolate, &attachedThread) == 0 && attachedThread) {
+        return { attachedThread, true };
+    }
+    return { nullptr, false };
+}
+
+void DetachThread(const GraalThreadAttachment& attachment) {
+    if (attachment.detachOnExit && fn_graal_detach_thread && attachment.thread) {
+        fn_graal_detach_thread(attachment.thread);
+    }
+}
+
+// Holds key properties parsed from the application's .cfg file.
+struct AppCfg {
+    std::string runtimeMode = "";
+    std::string runtimeLibrary = "";
+};
+
+// Parses the .cfg file accompanying the host executable to resolve runtime configuration properties.
+static AppCfg LoadAppCfg() {
+    AppCfg cfg;
+    wchar_t exePath[MAX_PATH];
+    GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+    std::wstring exeDir = exePath;
+    size_t lastSlash = exeDir.find_last_of(L"\\/");
+    if (lastSlash == std::wstring::npos) {
+        return cfg;
+    }
+    exeDir = exeDir.substr(0, lastSlash);
+
+    std::wstring exeName = exePath;
+    lastSlash = exeName.find_last_of(L"\\/");
+    if (lastSlash != std::wstring::npos) {
+        exeName = exeName.substr(lastSlash + 1);
+    }
+    size_t lastDot = exeName.find_last_of(L".");
+    if (lastDot != std::wstring::npos) {
+        exeName = exeName.substr(0, lastDot);
+    }
+
+    std::wstring configFile = exeDir + L"\\app\\" + exeName + L".cfg";
+    std::ifstream file(configFile);
+    if (!file.is_open()) {
+        configFile = exeDir + L"\\" + exeName + L".cfg";
+        file.open(configFile);
+        if (!file.is_open()) {
+            return cfg;
+        }
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
+        if (line.empty() || line[0] == '[') continue;
+
+        size_t eq = line.find('=');
+        if (eq == std::string::npos) continue;
+
+        std::string key = line.substr(0, eq);
+        std::string val = line.substr(eq + 1);
+
+        if (key == "runtime.mode") {
+            cfg.runtimeMode = val;
+        } else if (key == "runtime.library") {
+            cfg.runtimeLibrary = val;
+        }
+    }
+    return cfg;
+}
 #pragma comment(lib, "imm32.lib")
 #pragma comment(lib, "ole32.lib")
 
-// Custom window message to marshal IME geometry updates to the UI thread
-#define WM_COMPOSE_UPDATE_IME (WM_APP + 100)
 
 // DPI Helpers
 static float GetDpiScale(HWND hwnd) {
@@ -61,16 +199,247 @@ static void EnableDpiAwareness() {
     }
 }
 
-bool ComposeHostInitialize(const ComposeHostConfiguration& config) {
-    OleInitialize(NULL);
-    EnableDpiAwareness();
+// ============================================================================
+// Runtime Initialization & Routing
+// ============================================================================
+
+// Initializes the GraalVM shared library runtime.
+// This resolves the path to the native DLL, dynamically loads the C-API function pointers,
+// and creates the core GraalVM isolate that will host the Compose runtime.
+static bool InitializeSharedLibraryRuntime(const ComposeRuntimeStartup& startup) {
+    std::wstring libraryPath;
+    if (!startup.libraryPath.empty()) {
+        libraryPath = startup.libraryPath;
+    } else {
+        wchar_t exePath[MAX_PATH];
+        GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+        std::wstring exeDir = exePath;
+        size_t lastSlash = exeDir.find_last_of(L"\\/");
+        if (lastSlash != std::wstring::npos) {
+            exeDir = exeDir.substr(0, lastSlash);
+        }
+        std::wstring libName = startup.libraryName.empty() ? L"libcompose-native-host-runtime.dll" : startup.libraryName;
+
+        std::wstring nativePath = exeDir + L"\\native\\" + libName;
+        DWORD attribs = GetFileAttributesW(nativePath.c_str());
+        if (attribs != INVALID_FILE_ATTRIBUTES) {
+            libraryPath = nativePath;
+        } else {
+            libraryPath = exeDir + L"\\" + libName;
+        }
+    }
+
+    g_useSharedLibraryRuntime = true;
+    g_GraalDll = LoadLibraryW(libraryPath.c_str());
+    if (!g_GraalDll) {
+        std::cerr << "Failed to load GraalVM shared library: " << WideToUtf8(libraryPath) << ", error: " << GetLastError() << std::endl;
+        return false;
+    }
+
+    fn_graal_create_isolate = (graal_create_isolate_t)GetProcAddress(g_GraalDll, "graal_create_isolate");
+    fn_graal_attach_thread = (graal_attach_thread_t)GetProcAddress(g_GraalDll, "graal_attach_thread");
+    fn_graal_get_current_thread = (graal_get_current_thread_t)GetProcAddress(g_GraalDll, "graal_get_current_thread");
+    fn_graal_detach_thread = (graal_detach_thread_t)GetProcAddress(g_GraalDll, "graal_detach_thread");
+
+    fn_composeNativeHostRuntimeInitialize = (composeNativeHostRuntimeInitializeNoId_t)GetProcAddress(g_GraalDll, "composeNativeHostRuntimeInitialize");
+    fn_composeNativeHostRuntimeCreate = (composeNativeHostRuntimeCreate_t)GetProcAddress(g_GraalDll, "composeNativeHostRuntimeCreate");
+    fn_composeNativeHostRuntimeBindMain = (composeNativeHostRuntimeBindMain_t)GetProcAddress(g_GraalDll, "composeNativeHostRuntimeBindMain");
+    fn_composeNativeHostRuntimeStart = (composeNativeHostRuntimeStart_t)GetProcAddress(g_GraalDll, "composeNativeHostRuntimeStart");
+    fn_composeNativeHostRuntimeRequestFrame = (composeNativeHostRuntimeRequestFrame_t)GetProcAddress(g_GraalDll, "composeNativeHostRuntimeRequestFrame");
+    fn_composeNativeHostRuntimeClose = (composeNativeHostRuntimeClose_t)GetProcAddress(g_GraalDll, "composeNativeHostRuntimeClose");
+
+    fn_composeNativeHostRuntimeHandleExternalDragEntered = (composeNativeHostRuntimeHandleExternalDrop_t)GetProcAddress(g_GraalDll, "composeNativeHostRuntimeHandleExternalDragEntered");
+    fn_composeNativeHostRuntimeHandleExternalDragMoved = (composeNativeHostRuntimeHandleExternalDrop_t)GetProcAddress(g_GraalDll, "composeNativeHostRuntimeHandleExternalDragMoved");
+    fn_composeNativeHostRuntimeHandleExternalDragExited = (composeNativeHostRuntimeInitialize_t)GetProcAddress(g_GraalDll, "composeNativeHostRuntimeHandleExternalDragExited");
+    fn_composeNativeHostRuntimeHandleExternalDragEnded = (composeNativeHostRuntimeInitialize_t)GetProcAddress(g_GraalDll, "composeNativeHostRuntimeHandleExternalDragEnded");
+    fn_composeNativeHostRuntimeHandleExternalDrop = (composeNativeHostRuntimeHandleExternalDrop_t)GetProcAddress(g_GraalDll, "composeNativeHostRuntimeHandleExternalDrop");
+
+    if (!fn_graal_create_isolate || !fn_graal_attach_thread || !fn_graal_get_current_thread || !fn_graal_detach_thread ||
+        !fn_composeNativeHostRuntimeInitialize || !fn_composeNativeHostRuntimeCreate || !fn_composeNativeHostRuntimeBindMain ||
+        !fn_composeNativeHostRuntimeStart || !fn_composeNativeHostRuntimeRequestFrame || !fn_composeNativeHostRuntimeClose) {
+        std::cerr << "Failed to find GraalVM entrypoints in shared library." << std::endl;
+        FreeLibrary(g_GraalDll);
+        g_GraalDll = nullptr;
+        g_useSharedLibraryRuntime = false;
+        return false;
+    }
+
+    void* thread = nullptr;
+    int res = fn_graal_create_isolate(nullptr, &g_GraalIsolate, &thread);
+    if (res != 0 || !g_GraalIsolate) {
+        std::cerr << "Failed to create GraalVM isolate: " << res << std::endl;
+        FreeLibrary(g_GraalDll);
+        g_GraalDll = nullptr;
+        g_useSharedLibraryRuntime = false;
+        return false;
+    }
+
+    if (thread) {
+        fn_graal_detach_thread(thread);
+    }
+
+    return true;
+}
+
+static bool InitializeJvmRuntime(const ComposeRuntimeStartup& startup) {
     return HostJvm::Get().BootstrapJvm();
 }
 
+// Core initialization entry point for the Windows Compose host.
+// Initializes COM, enables DPI awareness, parses the application configuration (.cfg),
+// and routes initialization to either the JVM or the GraalVM shared library.
+bool ComposeHostInitialize(const ComposeHostConfiguration& config) {
+    OleInitialize(NULL);
+    EnableDpiAwareness();
+
+    // Load active mode and runtime parameters from the staged app config.
+    AppCfg appCfg = LoadAppCfg();
+
+    if (appCfg.runtimeMode == "sharedLibrary") {
+        // Find matching SharedLibrary startup configuration in allowed startups list.
+        const ComposeRuntimeStartup* startup = nullptr;
+        for (const auto& s : config.startups) {
+            if (s.mode == ComposeRuntimeStartupMode::SharedLibrary) {
+                startup = &s;
+                break;
+            }
+        }
+
+        if (!startup) {
+            std::cerr << "ComposeNativeHostRuntimeMode 'sharedLibrary' is not configured in allowed startups." << std::endl;
+            return false;
+        }
+
+        return InitializeSharedLibraryRuntime(*startup);
+    } else {
+        const ComposeRuntimeStartup* startup = nullptr;
+        for (const auto& s : config.startups) {
+            if (s.mode == ComposeRuntimeStartupMode::Jvm) {
+                startup = &s;
+                break;
+            }
+        }
+
+        if (!startup) {
+            std::cerr << "ComposeNativeHostRuntimeMode 'jvm' is not configured in allowed startups." << std::endl;
+            return false;
+        }
+
+        return InitializeJvmRuntime(*startup);
+    }
+}
+
 void ComposeHostShutdown() {
-    // Calling DestroyJavaVM() can hang indefinitely if Compose or AWT leaves non-daemon threads running.
-    // The OS will reclaim all resources when the process exits.
     OleUninitialize();
+    if (g_useSharedLibraryRuntime) {
+        if (g_GraalDll) {
+            FreeLibrary(g_GraalDll);
+            g_GraalDll = nullptr;
+        }
+        g_GraalIsolate = nullptr;
+        g_useSharedLibraryRuntime = false;
+    }
+}
+
+// Background rendering loop for the GraalVM shared library mode.
+// Attaches the current thread to the GraalVM isolate, instantiates the Compose runtime,
+// binds the entry point (main class), and enters a VSync loop using DwmFlush to drive frames.
+static void StartSharedLibraryRenderLoop(int64_t runtimeId, std::string mainClassName, bool enableProfile) {
+    auto s = HostJvm::Get().GetRuntime(runtimeId);
+    if (!s) return;
+
+    auto attachment = GetOrAttachThread();
+    if (!attachment.thread) {
+        std::cerr << "Failed to attach GraalVM thread." << std::endl;
+        return;
+    }
+
+    fn_composeNativeHostRuntimeInitialize(attachment.thread);
+    int64_t handle = fn_composeNativeHostRuntimeCreate(attachment.thread, runtimeId, enableProfile ? 1 : 0);
+    if (handle == 0) {
+        std::cerr << "Failed to create GraalVM Compose runtime." << std::endl;
+        DetachThread(attachment);
+        return;
+    }
+    s->graalRuntimeHandle = handle;
+
+    int32_t bindRes = fn_composeNativeHostRuntimeBindMain(attachment.thread, handle, mainClassName.c_str());
+    if (bindRes == 0) {
+        std::cerr << "Failed to bind main class in GraalVM Compose runtime: " << mainClassName << std::endl;
+        fn_composeNativeHostRuntimeClose(attachment.thread, handle);
+        s->graalRuntimeHandle = 0;
+        DetachThread(attachment);
+        return;
+    }
+
+    int32_t startRes = fn_composeNativeHostRuntimeStart(attachment.thread, handle);
+    if (startRes == 0) {
+        std::cerr << "Failed to start GraalVM Compose runtime." << std::endl;
+        fn_composeNativeHostRuntimeClose(attachment.thread, handle);
+        s->graalRuntimeHandle = 0;
+        DetachThread(attachment);
+        return;
+    }
+
+    LARGE_INTEGER qpf;
+    QueryPerformanceFrequency(&qpf);
+    double frequency = (double)qpf.QuadPart;
+
+    typedef void (WINAPI *DwmFlushType)(void);
+    HMODULE dwmapi = LoadLibraryW(L"dwmapi.dll");
+    DwmFlushType dwmFlushFn = nullptr;
+    if (dwmapi) {
+        dwmFlushFn = (DwmFlushType)GetProcAddress(dwmapi, "DwmFlush");
+        if (!dwmFlushFn) {
+            std::cerr << "Warning: DwmFlush function not found in dwmapi.dll. Falling back to Sleep(16)." << std::endl;
+        }
+    } else {
+        std::cerr << "Warning: dwmapi.dll not found. Falling back to Sleep(16)." << std::endl;
+    }
+
+    while (s->isRunning && s->graalRuntimeHandle) {
+        if (dwmFlushFn) {
+            dwmFlushFn();
+        } else {
+            Sleep(16);
+        }
+
+        if (!s->isRunning || !s->graalRuntimeHandle) {
+            break;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(s->lock);
+            s->requestRenderTick = false;
+        }
+
+        LARGE_INTEGER qpc;
+        QueryPerformanceCounter(&qpc);
+        int64_t vsyncNanos = (int64_t)((double)qpc.QuadPart / frequency * 1000000000.0);
+
+        fn_composeNativeHostRuntimeRequestFrame(attachment.thread, handle, vsyncNanos);
+    }
+
+    if (s->graalRuntimeHandle) {
+        fn_composeNativeHostRuntimeClose(attachment.thread, handle);
+        s->graalRuntimeHandle = 0;
+    }
+
+    if (dwmapi) {
+        FreeLibrary(dwmapi);
+    }
+
+    DetachThread(attachment);
+}
+
+static void StartJvmRenderLoop(int64_t runtimeId, std::string mainClassName, bool enableProfile) {
+    auto s = HostJvm::Get().GetRuntime(runtimeId);
+    if (!s) return;
+    if (HostJvm::Get().PrepareRuntime(runtimeId, mainClassName, enableProfile)) {
+        HostJvm::Get().RunRenderLoop(runtimeId, &s->isRunning);
+    } else {
+        std::cerr << "Failed to prepare JVM Compose native runtime." << std::endl;
+    }
 }
 
 HCOMPOSERUNTIME ComposeRuntimeCreate(HWND hwnd, const ComposeRuntimeConfiguration& config) {
@@ -113,19 +482,16 @@ HCOMPOSERUNTIME ComposeRuntimeCreate(HWND hwnd, const ComposeRuntimeConfiguratio
 
     std::string mainClassName = config.kotlinMainClass;
     if (mainClassName.empty()) {
-        mainClassName = "letmutex/compose/nativehost/sample/MainKt";
+        std::cerr << "Fatal: ComposeRuntimeConfiguration.kotlinMainClass must not be empty." << std::endl;
+        return nullptr;
     }
     bool enableProfile = config.enableProfileRendering;
 
-    state->renderThread = std::thread([runtimeId, mainClassName, enableProfile]() {
-        auto s = HostJvm::Get().GetRuntime(runtimeId);
-        if (!s) return;
-        if (HostJvm::Get().PrepareRuntime(runtimeId, mainClassName, enableProfile)) {
-            HostJvm::Get().RunRenderLoop(runtimeId, &s->isRunning);
-        } else {
-            std::cerr << "Failed to prepare JVM Compose native runtime." << std::endl;
-        }
-    });
+    if (g_useSharedLibraryRuntime) {
+        state->renderThread = std::thread(StartSharedLibraryRenderLoop, runtimeId, mainClassName, enableProfile);
+    } else {
+        state->renderThread = std::thread(StartJvmRenderLoop, runtimeId, mainClassName, enableProfile);
+    }
 
     return (HCOMPOSERUNTIME)runtimeId;
 }
@@ -164,305 +530,4 @@ void ComposeRuntimeSetEventCallback(HCOMPOSERUNTIME runtime, ComposeRuntimeEvent
     }
 }
 
-bool ComposeRuntimeHandleMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
-    auto state = HostJvm::Get().GetRuntimeByHwnd(hwnd);
-    if (!state) return false;
 
-    auto getModifiers = []() {
-        int32_t modifiers = 0;
-        if (GetKeyState(VK_CONTROL) < 0) modifiers |= keyboardModifierCtrl;
-        if (GetKeyState(VK_LWIN) < 0 || GetKeyState(VK_RWIN) < 0) modifiers |= keyboardModifierMeta;
-        if (GetKeyState(VK_MENU) < 0) modifiers |= keyboardModifierAlt;
-        if (GetKeyState(VK_SHIFT) < 0) modifiers |= keyboardModifierShift;
-        return modifiers;
-    };
-
-    auto getButtons = [wParam]() {
-        int32_t buttons = 0;
-        if (wParam & MK_LBUTTON) buttons |= pointerButtonPrimary;
-        if (wParam & MK_RBUTTON) buttons |= pointerButtonSecondary;
-        if (wParam & MK_MBUTTON) buttons |= pointerButtonTertiary;
-        return buttons;
-    };
-
-    switch (message) {
-        case WM_SIZE: {
-            if (wParam != SIZE_MINIMIZED) {
-                int width = LOWORD(lParam);
-                int height = HIWORD(lParam);
-                state->cachedMetrics.width = width;
-                state->cachedMetrics.height = height;
-                state->cachedMetrics.isMaximized = (wParam == SIZE_MAXIMIZED);
-
-                {
-                    std::lock_guard<std::mutex> lock(state->lock);
-                    state->pendingWidth = width;
-                    state->pendingHeight = height;
-                    state->resizePending = true;
-                    state->requestRenderTick = true;
-                }
-                state->cv.notify_one();
-            }
-            return true;
-        }
-        case WM_PAINT: {
-            {
-                std::lock_guard<std::mutex> lock(state->lock);
-                state->requestRenderTick = true;
-            }
-            state->cv.notify_one();
-            return false;
-        }
-        case WM_ERASEBKGND:
-            return true;
-        case WM_SETFOCUS:
-        case WM_KILLFOCUS: {
-            state->cachedMetrics.isFocused = (message == WM_SETFOCUS);
-            return true;
-        }
-        case WM_SETCURSOR: {
-            if (LOWORD(lParam) == HTCLIENT) {
-                int32_t cursorType = state->currentCursorType.load();
-                LPCTSTR cursorName = IDC_ARROW;
-                switch (cursorType) {
-                    case 0: cursorName = IDC_ARROW; break;
-                    case 1: cursorName = IDC_CROSS; break;
-                    case 2: cursorName = IDC_IBEAM; break;
-                    case 3: cursorName = IDC_WAIT; break;
-                    case 4: cursorName = IDC_SIZENESW; break;
-                    case 5: cursorName = IDC_SIZENWSE; break;
-                    case 6: cursorName = IDC_SIZENWSE; break;
-                    case 7: cursorName = IDC_SIZENESW; break;
-                    case 8: cursorName = IDC_SIZENS; break;
-                    case 9: cursorName = IDC_SIZENS; break;
-                    case 10: cursorName = IDC_SIZEWE; break;
-                    case 11: cursorName = IDC_SIZEWE; break;
-                    case 12: cursorName = IDC_HAND; break;
-                    case 13: cursorName = IDC_SIZEALL; break;
-                }
-                HCURSOR hCursor = LoadCursor(NULL, cursorName);
-                SetCursor(hCursor);
-                return true;
-            }
-            break;
-        }
-        case WM_DPICHANGED: {
-            state->cachedMetrics.scale = LOWORD(wParam) / 96.0f;
-            RECT* const prcNewWindow = (RECT*)lParam;
-            SetWindowPos(hwnd,
-                NULL,
-                prcNewWindow->left,
-                prcNewWindow->top,
-                prcNewWindow->right - prcNewWindow->left,
-                prcNewWindow->bottom - prcNewWindow->top,
-                SWP_NOZORDER | SWP_NOACTIVATE);
-            return true;
-        }
-        case WM_MOUSEMOVE: {
-            state->cachedMetrics.hoveredCaptionButton = 0; // Clear NC hover
-
-            if (!state->isMouseTracked) {
-                TRACKMOUSEEVENT tme = { sizeof(TRACKMOUSEEVENT), TME_LEAVE, hwnd, 0 };
-                TrackMouseEvent(&tme);
-                state->isMouseTracked = true;
-            }
-
-            PointerEventRecord record = {};
-            record.eventType = pointerEventTypeMove;
-            record.timestampMillis = GetTickCount64();
-            record.x = (float)GET_X_LPARAM(lParam);
-            record.y = (float)GET_Y_LPARAM(lParam);
-            record.buttonsMask = getButtons();
-            record.modifiersMask = getModifiers();
-            record.buttonIndex = -1;
-            state->inputEvents.EnqueuePointer(record);
-            return true;
-        }
-        case WM_MOUSELEAVE: {
-            state->isMouseTracked = false;
-            state->cachedMetrics.hoveredCaptionButton = 0;
-            
-            PointerEventRecord record = {};
-            record.eventType = pointerEventTypeExit;
-            record.timestampMillis = GetTickCount64();
-            record.x = -1.0f;
-            record.y = -1.0f;
-            record.buttonsMask = getButtons();
-            record.modifiersMask = getModifiers();
-            record.buttonIndex = -1;
-            state->inputEvents.EnqueuePointer(record);
-            
-            return true;
-        }
-        case WM_NCMOUSEMOVE: {
-            TRACKMOUSEEVENT tme = { sizeof(TRACKMOUSEEVENT), TME_NONCLIENT | TME_LEAVE, hwnd, 0 };
-            TrackMouseEvent(&tme);
-
-            int hitTest = wParam;
-            int button = 0;
-            if (hitTest == HTMINBUTTON) button = 1;
-            else if (hitTest == HTMAXBUTTON) button = 2;
-            else if (hitTest == HTCLOSE) button = 3;
-            
-            if (state->cachedMetrics.hoveredCaptionButton != button) {
-                state->cachedMetrics.hoveredCaptionButton = button;
-                {
-                    std::lock_guard<std::mutex> lock(state->lock);
-                    state->requestRenderTick = true;
-                }
-                state->cv.notify_one();
-            }
-            return false;
-        }
-        case WM_NCMOUSELEAVE: {
-            if (state->cachedMetrics.hoveredCaptionButton != 0) {
-                state->cachedMetrics.hoveredCaptionButton = 0;
-                {
-                    std::lock_guard<std::mutex> lock(state->lock);
-                    state->requestRenderTick = true;
-                }
-                state->cv.notify_one();
-            }
-            return false;
-        }
-        case WM_LBUTTONDOWN:
-        case WM_RBUTTONDOWN:
-        case WM_MBUTTONDOWN: {
-            int32_t btnIdx = 0;
-            int32_t btnMask = pointerButtonPrimary;
-            if (message == WM_RBUTTONDOWN) { btnIdx = 1; btnMask = pointerButtonSecondary; }
-            if (message == WM_MBUTTONDOWN) { btnIdx = 2; btnMask = pointerButtonTertiary; }
-
-            PointerEventRecord record = {};
-            record.eventType = pointerEventTypePress;
-            record.timestampMillis = GetTickCount64();
-            record.x = (float)GET_X_LPARAM(lParam);
-            record.y = (float)GET_Y_LPARAM(lParam);
-            record.buttonsMask = getButtons() | btnMask;
-            record.modifiersMask = getModifiers();
-            record.buttonIndex = btnIdx;
-            state->inputEvents.EnqueuePointer(record);
-            return true;
-        }
-        case WM_LBUTTONUP:
-        case WM_RBUTTONUP:
-        case WM_MBUTTONUP: {
-            int32_t btnIdx = 0;
-            int32_t btnMask = pointerButtonPrimary;
-            if (message == WM_RBUTTONUP) { btnIdx = 1; btnMask = pointerButtonSecondary; }
-            if (message == WM_MBUTTONUP) { btnIdx = 2; btnMask = pointerButtonTertiary; }
-
-            PointerEventRecord record = {};
-            record.eventType = pointerEventTypeRelease;
-            record.timestampMillis = GetTickCount64();
-            record.x = (float)GET_X_LPARAM(lParam);
-            record.y = (float)GET_Y_LPARAM(lParam);
-            record.buttonsMask = getButtons() & ~btnMask;
-            record.modifiersMask = getModifiers();
-            record.buttonIndex = btnIdx;
-            state->inputEvents.EnqueuePointer(record);
-            return true;
-        }
-        case WM_MOUSEWHEEL: {
-            short delta = GET_WHEEL_DELTA_WPARAM(wParam);
-            float scrollY = (float)delta / (float)WHEEL_DELTA;
-            POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-            ScreenToClient(hwnd, &pt);
-
-            PointerEventRecord record = {};
-            record.eventType = pointerEventTypeScroll;
-            record.timestampMillis = GetTickCount64();
-            record.x = (float)pt.x;
-            record.y = (float)pt.y;
-            record.scrollX = 0;
-            record.scrollY = -scrollY * 10.0f;
-            record.buttonsMask = getButtons();
-            record.modifiersMask = getModifiers();
-            record.buttonIndex = -1;
-            state->inputEvents.EnqueuePointer(record);
-            return true;
-        }
-        case WM_KEYDOWN:
-        case WM_SYSKEYDOWN:
-        case WM_KEYUP:
-        case WM_SYSKEYUP: {
-            KeyEventRecord record = {};
-            record.eventType = (message == WM_KEYDOWN || message == WM_SYSKEYDOWN) ? keyEventTypeDown : keyEventTypeUp;
-            record.timestampMillis = GetTickCount64();
-            record.keyCode = (int32_t)wParam;
-            record.codePoint = 0;
-            record.modifiersMask = getModifiers();
-            state->inputEvents.EnqueueKey(record);
-            return true;
-        }
-        case WM_CHAR: {
-            wchar_t ch = (wchar_t)wParam;
-            if (ch >= 0x20 && ch != 0x7F) {
-                TextEventRecord record = {};
-                record.eventType = textInputEventTypeCommit;
-                record.timestampMillis = GetTickCount64();
-
-                std::wstring wstr(1, ch);
-                std::string strUtf8;
-                int size_needed = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), NULL, 0, NULL, NULL);
-                strUtf8.resize(size_needed);
-                WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), &strUtf8[0], size_needed, NULL, NULL);
-
-                record.text = strUtf8;
-                state->inputEvents.EnqueueText(record);
-            }
-            return true;
-        }
-        case WM_ENTERSIZEMOVE: {
-            state->isInLiveResize.store(true, std::memory_order_release);
-            return true;
-        }
-        case WM_EXITSIZEMOVE: {
-            state->isInLiveResize.store(false, std::memory_order_release);
-            return true;
-        }
-        case WM_COMPOSE_UPDATE_IME:
-        case WM_IME_STARTCOMPOSITION: {
-            // Apply stored text input geometry to the IME composition and candidate windows.
-            // This handles two cases:
-            //   1. WM_COMPOSE_UPDATE_IME: posted from nativeHostUpdateTextInputGeometry (JNI thread)
-            //      to marshal the IMM calls onto the UI thread that owns the HWND.
-            //   2. WM_IME_STARTCOMPOSITION: the system sends this when IME composition begins,
-            //      and the default handler would reset the position. We intercept it to keep ours.
-            // Coordinates from Compose focusedRect are already in physical client pixels,
-            // so we do not multiply by cachedMetrics.scale.
-            float left = state->focusedRectLeft;
-            float top = state->focusedRectTop;
-            float right = state->focusedRectRight;
-            float bottom = state->focusedRectBottom;
-
-            HIMC himc = ImmGetContext(hwnd);
-            if (himc) {
-                COMPOSITIONFORM compForm = {};
-                compForm.dwStyle = CFS_POINT;
-                compForm.ptCurrentPos.x = (LONG)left;
-                compForm.ptCurrentPos.y = (LONG)top;
-                ImmSetCompositionWindow(himc, &compForm);
-
-                CANDIDATEFORM candidateForm = {};
-                candidateForm.dwIndex = 0;
-                candidateForm.dwStyle = CFS_EXCLUDE;
-                // For CFS_EXCLUDE, ptCurrentPos is the point of interest (caret position)
-                candidateForm.ptCurrentPos.x = (LONG)left;
-                candidateForm.ptCurrentPos.y = (LONG)top;
-                // rcArea defines the exclusion rectangle where the candidate window must not overlap
-                candidateForm.rcArea.left = (LONG)left;
-                candidateForm.rcArea.top = (LONG)top;
-                candidateForm.rcArea.right = (LONG)right;
-                candidateForm.rcArea.bottom = (LONG)bottom;
-                ImmSetCandidateWindow(himc, &candidateForm);
-
-                ImmReleaseContext(hwnd, himc);
-            }
-            // For WM_IME_STARTCOMPOSITION, return true to prevent DefWindowProc from resetting the position.
-            // For WM_COMPOSE_UPDATE_IME, it's our own message so just return true.
-            return true;
-        }
-    }
-    return false;
-}

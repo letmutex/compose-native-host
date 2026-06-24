@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <string>
+#include <vector>
 
 // Opaque handle representing a bound Compose runtime instance
 typedef void* HCOMPOSERUNTIME;
@@ -15,8 +16,49 @@ struct ComposeRuntimeConfiguration {
     void* eventUserData = nullptr;
 };
 
+// Mode of the hosted Compose runtime execution backend on Windows.
+enum class ComposeRuntimeStartupMode {
+    // Starts the runtime by booting a standard HotSpot JVM and using JNI.
+    Jvm,
+    // Starts the runtime by dynamically loading a compiled GraalVM shared library.
+    SharedLibrary
+};
+
+// Programmatic configuration for booting/attaching to the hosted Kotlin/Compose backend.
+struct ComposeRuntimeStartup {
+    // The startup backend mode (JVM or Shared Library).
+    ComposeRuntimeStartupMode mode = ComposeRuntimeStartupMode::Jvm;
+    // For SharedLibrary mode: the filename of the shared library (e.g. L"libcompose-native-host-runtime.dll").
+    std::wstring libraryName = L"";
+    // For SharedLibrary mode: the optional absolute/relative library path to load explicitly.
+    std::wstring libraryPath = L"";
+
+    // Helper to create a JVM startup configuration.
+    static ComposeRuntimeStartup Jvm() {
+        ComposeRuntimeStartup startup;
+        startup.mode = ComposeRuntimeStartupMode::Jvm;
+        return startup;
+    }
+
+    // Helper to create a Shared Library (GraalVM) startup configuration.
+    static ComposeRuntimeStartup SharedLibrary(
+        const std::wstring& libraryName = L"libcompose-native-host-runtime.dll",
+        const std::wstring& libraryPath = L""
+    ) {
+        ComposeRuntimeStartup startup;
+        startup.mode = ComposeRuntimeStartupMode::SharedLibrary;
+        startup.libraryName = libraryName;
+        startup.libraryPath = libraryPath;
+        return startup;
+    }
+};
+
+// Global configuration passed during ComposeHostInitialize.
 struct ComposeHostConfiguration {
+    // If true, diagnostic logging is printed to standard streams.
     bool enableLogging = false;
+    // Set of allowed runtime startup backends. Defaults to standard JVM only.
+    std::vector<ComposeRuntimeStartup> startups = { ComposeRuntimeStartup::Jvm() };
 };
 
 // Initializes the Compose Native Host engine (bootstraps JNI/JVM).

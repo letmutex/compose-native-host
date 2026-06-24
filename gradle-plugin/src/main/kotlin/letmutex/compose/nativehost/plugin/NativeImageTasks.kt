@@ -270,35 +270,66 @@ internal fun registerNativeImageBuildSharedLibraryTask(
             sharedLibraryOutputDir.mkdirs()
             environment("JAVA_HOME", graalHome)
             environment("GRAALVM_HOME", graalHome)
-            val command =
-                buildList {
-                    add("$graalHome/bin/native-image")
-                    add("--shared")
-                    add("--no-fallback")
-                    add("-H:+ReportExceptionStackTraces")
-                    if (config.includeResourcePatterns.isNotEmpty()) {
-                        val includeResourcesPattern =
-                            config.includeResourcePatterns.joinToString(separator = "|") { pattern ->
-                                "($pattern)"
-                            }
-                        add("-H:IncludeResources=$includeResourcesPattern")
-                    }
-                    add("-H:JNIConfigurationFiles=${config.generatedJniConfigFile.absolutePath}")
-                    config.preservePackages.forEach { packageName ->
-                        add("-H:Preserve=package=$packageName")
-                    }
-                    addAll(sharedLibraryExtraBuildArgs(config, flavor))
-                    add("--add-modules=org.graalvm.nativeimage")
-                    add("-cp")
-                    add(
-                        listOf(config.helperJarFile, composeUberJar)
-                            .joinToString(separator = File.pathSeparator) { it.absolutePath },
-                    )
-                    add("-o")
-                    add(File(sharedLibraryOutputDir, config.sharedLibraryBaseName).absolutePath)
-                    add(config.helperMainClass)
+            val nativeImageTool = if (hostOsPrefix == "windows") {
+                val cmdFile = File(graalHome, "bin/native-image.cmd")
+                val exeFile = File(graalHome, "bin/native-image.exe")
+                if (exeFile.exists()) exeFile.absolutePath else cmdFile.absolutePath
+            } else {
+                "$graalHome/bin/native-image"
+            }
+
+            val argsList = buildList {
+                add("--shared")
+                add("--no-fallback")
+                add("-H:+ReportExceptionStackTraces")
+                if (config.includeResourcePatterns.isNotEmpty()) {
+                    val includeResourcesPattern =
+                        config.includeResourcePatterns.joinToString(separator = "|") { pattern ->
+                            "($pattern)"
+                        }
+                    add("-H:IncludeResources=$includeResourcesPattern")
                 }
-            commandLine(command)
+                add("-H:JNIConfigurationFiles=${config.generatedJniConfigFile.absolutePath.replace('\\', '/')}")
+                config.preservePackages.forEach { packageName ->
+                    add("-H:Preserve=package=$packageName")
+                }
+                addAll(sharedLibraryExtraBuildArgs(config, flavor))
+                add("--add-modules=org.graalvm.nativeimage")
+                add("-cp")
+                add(
+                    listOf(config.helperJarFile, composeUberJar)
+                        .joinToString(separator = File.pathSeparator) { it.absolutePath.replace('\\', '/') },
+                )
+                add("-o")
+                add(File(sharedLibraryOutputDir, config.sharedLibraryBaseName).absolutePath.replace('\\', '/'))
+                add(config.helperMainClass)
+            }
+
+            if (hostOsPrefix == "windows") {
+                val isEnvActive = !System.getenv("INCLUDE").isNullOrBlank() && !System.getenv("LIB").isNullOrBlank()
+                val buildCmd = buildString {
+                    if (!isEnvActive) {
+                        val vcvars64 = locateVcvars64(project).absolutePath
+                        append("call \"")
+                        append(vcvars64)
+                        append("\" && ")
+                    }
+                    append("\"")
+                    append(nativeImageTool)
+                    append("\"")
+                    argsList.forEach { arg ->
+                        append(" \"")
+                        append(arg.replace("\"", "\\\""))
+                        append("\"")
+                    }
+                }
+                commandLine("cmd.exe", "/c", buildCmd)
+            } else {
+                commandLine(buildList {
+                    add(nativeImageTool)
+                    addAll(argsList)
+                })
+            }
         }
     }
 
