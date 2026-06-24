@@ -106,6 +106,39 @@ public:
         float buttonHeight = 32.0f;
     };
 
+    // Detects which caption button is hovered based on client coordinates
+    static int DetectHoveredButton(HWND hwnd, int x, int y, const CaptionButtonOptions& options = {}) {
+        float dpiScale = 1.0f;
+        HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        if (user32) {
+            typedef UINT(WINAPI *GetDpiForWindowType)(HWND);
+            auto getDpi = (GetDpiForWindowType)GetProcAddress(user32, "GetDpiForWindow");
+            if (getDpi) {
+                dpiScale = getDpi(hwnd) / 96.0f;
+            }
+        }
+        if (dpiScale <= 0.0f) {
+            HDC hdc = GetDC(hwnd);
+            dpiScale = GetDeviceCaps(hdc, LOGPIXELSX) / 96.0f;
+            ReleaseDC(hwnd, hdc);
+        }
+
+        int btnWidth = (int)std::round(options.buttonWidth * dpiScale);
+        int btnHeight = (int)std::round(options.buttonHeight * dpiScale);
+        int totalBtnWidth = btnWidth * 3;
+
+        RECT rcWindow;
+        GetClientRect(hwnd, &rcWindow);
+
+        if (y >= 0 && y < btnHeight && x >= rcWindow.right - totalBtnWidth && x < rcWindow.right) {
+            int offset = x - (rcWindow.right - totalBtnWidth);
+            if (offset < btnWidth) return 1;
+            if (offset < btnWidth * 2) return 2;
+            return 3;
+        }
+        return 0;
+    }
+
     // Call this inside your WM_LBUTTONDOWN block to enable dragging the window
     // before Compose intercepts messages.
     // Returns true if the drag was initiated.
@@ -144,7 +177,7 @@ public:
     }
 
     // Draws pixel-perfect geometric caption buttons matching Compose Desktop's default style.
-    static void DrawCaptionButtons(HWND hwnd, HDC hdc, const CaptionButtonOptions& options = {}) {
+    static void DrawCaptionButtons(HWND hwnd, HDC hdc, int hoveredButton = 0, const CaptionButtonOptions& options = {}) {
         RECT rcWindow;
         GetClientRect(hwnd, &rcWindow);
 
@@ -175,6 +208,17 @@ public:
             graphics.Clear(Gdiplus::Color(255, 32, 32, 32));
         } else {
             graphics.Clear(Gdiplus::Color(255, 255, 255, 255));
+        }
+
+        Gdiplus::SolidBrush bgBrushMinMax(options.isDarkMode ? Gdiplus::Color(25, 255, 255, 255) : Gdiplus::Color(25, 0, 0, 0));
+        Gdiplus::SolidBrush bgBrushClose(Gdiplus::Color(255, 232, 17, 35));
+
+        if (hoveredButton == 1) {
+            graphics.FillRectangle(&bgBrushMinMax, 0, 0, btnWidth, btnHeight);
+        } else if (hoveredButton == 2) {
+            graphics.FillRectangle(&bgBrushMinMax, btnWidth, 0, btnWidth, btnHeight);
+        } else if (hoveredButton == 3) {
+            graphics.FillRectangle(&bgBrushClose, btnWidth * 2, 0, btnWidth, btnHeight);
         }
 
         int strokePx = (dpiScale >= 2.0f) ? 2 : 1;
@@ -230,7 +274,8 @@ public:
             graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
             
             float closeStroke = 1.2f * dpiScale;
-            Gdiplus::Pen closePen(fgColor, closeStroke);
+            Gdiplus::Color closeFgColor = (hoveredButton == 3) ? Gdiplus::Color(255, 255, 255, 255) : fgColor;
+            Gdiplus::Pen closePen(closeFgColor, closeStroke);
             
             graphics.DrawLine(&closePen, (float)ox, (float)oy, (float)(ox + w), (float)(oy + h));
             graphics.DrawLine(&closePen, (float)ox, (float)(oy + h), (float)(ox + w), (float)oy);

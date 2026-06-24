@@ -206,15 +206,12 @@ bool ComposeRuntimeHandleMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
             return true;
         }
         case WM_PAINT: {
-            PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hwnd, &ps);
-            EndPaint(hwnd, &ps);
             {
                 std::lock_guard<std::mutex> lock(state->lock);
                 state->requestRenderTick = true;
             }
             state->cv.notify_one();
-            return true;
+            return false;
         }
         case WM_ERASEBKGND:
             return true;

@@ -13,6 +13,7 @@ struct SampleWindow {
     HWND hwnd = nullptr;
     HCOMPOSERUNTIME runtime = nullptr;
     bool isFirstFrameRendered = false;
+    int hoveredButton = 0;
 };
 
 std::vector<std::shared_ptr<SampleWindow>> g_ActiveWindows;
@@ -21,15 +22,22 @@ HINSTANCE g_hInstance = nullptr;
 LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 void CreateSampleWindow();
 
+std::shared_ptr<SampleWindow> GetSampleWindow(HWND hwnd) {
+    for (auto& window : g_ActiveWindows) {
+        if (window->hwnd == hwnd) {
+            return window;
+        }
+    }
+    return nullptr;
+}
+
+
 void OnComposeEvent(HCOMPOSERUNTIME runtime, const char* name, const char* payload, void* userData) {
     std::cout << "[C++ Callback] Event received: " << name << ", payload: " << (payload ? payload : "null") << std::endl;
     if (strcmp(name, "phaseChanged") == 0 && payload && strcmp(payload, "firstFramePresented") == 0) {
         HWND hwnd = (HWND)userData;
-        for (auto& window : g_ActiveWindows) {
-            if (window->hwnd == hwnd) {
-                window->isFirstFrameRendered = true;
-                break;
-            }
+        if (auto window = GetSampleWindow((HWND)userData)) {
+            window->isFirstFrameRendered = true;
         }
     } else if (strcmp(name, "sample.window.open") == 0) {
         HWND hwnd = (HWND)userData;
@@ -150,15 +158,11 @@ void CreateSampleWindow() {
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    auto window = GetSampleWindow(hwnd);
+    bool isFirstFrameRendered = window ? window->isFirstFrameRendered : false;
+    int hoveredButton = window ? window->hoveredButton : 0;
+
     if (message == WM_LBUTTONDOWN) {
-        bool isFirstFrameRendered = false;
-        for (auto& window : g_ActiveWindows) {
-            if (window->hwnd == hwnd) {
-                isFirstFrameRendered = window->isFirstFrameRendered;
-                break;
-            }
-        }
-        
         // If Compose hasn't fully rendered the first frame, we intercept the click BEFORE Compose
         // processes it, enabling the splash screen to be dragged natively without breaking Compose later.
         if (!isFirstFrameRendered) {
@@ -173,10 +177,35 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
     }
 
     switch (message) {
+        case WM_NCMOUSEMOVE: {
+            if (!isFirstFrameRendered && window) {
+                int hovered = 0;
+                if (wParam == HTMINBUTTON) hovered = 1;
+                else if (wParam == HTMAXBUTTON) hovered = 2;
+                else if (wParam == HTCLOSE) hovered = 3;
+                
+                if (window->hoveredButton != hovered) {
+                    window->hoveredButton = hovered;
+                    InvalidateRect(hwnd, NULL, FALSE);
+                }
+            }
+            break;
+        }
+        case WM_NCMOUSELEAVE: {
+            if (!isFirstFrameRendered && window) {
+                if (window->hoveredButton != 0) {
+                    window->hoveredButton = 0;
+                    InvalidateRect(hwnd, NULL, FALSE);
+                }
+            }
+            break;
+        }
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd, &ps);
-            ComposeWindowHelper::DrawCaptionButtons(hwnd, hdc);
+            if (!isFirstFrameRendered) {
+                ComposeWindowHelper::DrawCaptionButtons(hwnd, hdc, hoveredButton);
+            }
             EndPaint(hwnd, &ps);
             return 0;
         }
@@ -191,14 +220,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 0;
 
         case WM_INIT_COMPOSE: {
-            for (auto& window : g_ActiveWindows) {
-                if (window->hwnd == hwnd && !window->runtime) {
-                    ComposeRuntimeConfiguration config;
-                    config.kotlinMainClass = "letmutex.compose.nativehost.sample.HostedMainKt";
-                    config.eventCallback = OnComposeEvent;
-                    config.eventUserData = hwnd;
-                    window->runtime = ComposeRuntimeCreate(hwnd, config);
-                }
+            if (window && !window->runtime) {
+                ComposeRuntimeConfiguration config;
+                config.kotlinMainClass = "letmutex.compose.nativehost.sample.HostedMainKt";
+                config.eventCallback = OnComposeEvent;
+                config.eventUserData = hwnd;
+                window->runtime = ComposeRuntimeCreate(hwnd, config);
             }
             return 0;
         }
