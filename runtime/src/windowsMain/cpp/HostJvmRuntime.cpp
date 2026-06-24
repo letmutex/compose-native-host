@@ -97,6 +97,9 @@ bool HostJvm::PrepareRuntime(int64_t runtimeId, const std::string& mainClassName
     return prepared;
 }
 
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
+
 void HostJvm::RunRenderLoop(int64_t runtimeId, bool* isHostRunning) {
     auto state = GetRuntime(runtimeId);
     if (!state || !state->jvmRuntimeRef) return;
@@ -109,16 +112,14 @@ void HostJvm::RunRenderLoop(int64_t runtimeId, bool* isHostRunning) {
         double frequency = (double)qpf.QuadPart;
 
         while (*isHostRunning && state->jvmRuntimeRef) {
+            DwmFlush(); // Block natively until the Desktop Window Manager VBlank
+
+            if (!*isHostRunning || !state->jvmRuntimeRef) {
+                break;
+            }
+
             {
-                std::unique_lock<std::mutex> uLock(state->lock);
-                if (!state->requestRenderTick) {
-                    state->cv.wait_for(uLock, std::chrono::milliseconds(16), [&]() {
-                        return state->requestRenderTick || !*isHostRunning || !state->jvmRuntimeRef;
-                    });
-                }
-                if (!*isHostRunning || !state->jvmRuntimeRef) {
-                    break;
-                }
+                std::lock_guard<std::mutex> lock(state->lock);
                 state->requestRenderTick = false;
             }
 
