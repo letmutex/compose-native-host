@@ -38,22 +38,39 @@ private fun configureTasksAfterEvaluate(
         val preparePatchedComposeDesktopRuntimeClasspath =
             registerPreparePatchedComposeDesktopRuntimeClasspathTask(project, bundleConfig)
 
-        configureBuildNativeLauncher(
-            project = project,
-            config = launcherConfig,
-            taskProvider = buildNativeLauncher,
-            extractTask = extractTask,
-            buildNativeBridge = buildNativeBridge,
-            generateJvmArgsSwiftSource = generateJvmArgsSwiftSource,
-        )
-        configureBuildNativeBridge(
-            project = project,
-            config = launcherConfig,
-            taskProvider = buildNativeBridge,
-            extractTask = extractTask,
-            generateJvmArgsSwiftSource = generateJvmArgsSwiftSource,
-            buildNativeLauncher = buildNativeLauncher,
-        )
+        if (hostOsPrefix == "windows") {
+            configureWindowsNativeLauncher(
+                project = project,
+                config = launcherConfig,
+                taskProvider = buildNativeLauncher,
+                extractTask = extractTask,
+                generateJvmArgsSwiftSource = generateJvmArgsSwiftSource,
+            )
+            configureWindowsNativeBridge(
+                project = project,
+                config = launcherConfig,
+                taskProvider = buildNativeBridge,
+                extractTask = extractTask,
+                generateJvmArgsSwiftSource = generateJvmArgsSwiftSource,
+                buildNativeLauncher = buildNativeLauncher,
+            )
+        } else {
+            configureMacOsNativeLauncher(
+                project = project,
+                config = launcherConfig,
+                taskProvider = buildNativeLauncher,
+                extractTask = extractTask,
+                buildNativeBridge = buildNativeBridge,
+                generateJvmArgsSwiftSource = generateJvmArgsSwiftSource,
+            )
+            configureMacOsNativeBridge(
+                project = project,
+                config = launcherConfig,
+                taskProvider = buildNativeBridge,
+                extractTask = extractTask,
+                generateJvmArgsSwiftSource = generateJvmArgsSwiftSource,
+            )
+        }
         configureJvmBundleTasks(
             project = project,
             bundleConfig = bundleConfig,
