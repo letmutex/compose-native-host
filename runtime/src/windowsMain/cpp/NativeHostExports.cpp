@@ -64,9 +64,9 @@ EXPORT int64_t nativeHostAcquireDrawableTexturePtr(int64_t runtimeId) {
 EXPORT void nativeHostPresentDrawable(int64_t runtimeId) {
     auto state = HostJvm::Get().GetRuntime(runtimeId);
     if (state) {
-        // Skip VSync during live resize to avoid DWM stall in the modal resize loop
-        UINT syncInterval = state->isInLiveResize.load(std::memory_order_acquire) ? 0 : 1;
-        state->renderer.Present(syncInterval);
+        // Use syncInterval=0 since the render loop is already throttled to VSync natively via DwmFlush.
+        // This avoids double-throttling / serializing the UI thread and render thread, allowing proper pipelining.
+        state->renderer.Present(0);
         
         if (!state->isFirstFrameRendered) {
             state->isFirstFrameRendered = true;

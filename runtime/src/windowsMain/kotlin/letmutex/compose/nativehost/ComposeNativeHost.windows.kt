@@ -2,6 +2,7 @@ package letmutex.compose.nativehost
 
 import androidx.compose.runtime.Composable
 import letmutex.compose.nativehost.internal.WindowsComposeBridge
+import letmutex.compose.nativehost.internal.WindowsComposeBridgeBindings
 
 actual fun ComposeNativeHost(content: @Composable ComposeNativeHostScope.() -> Unit) {
     check(WindowsComposeBridge.isAvailable()) {
@@ -17,4 +18,8 @@ actual fun isComposeNativeHostAvailable(): Boolean {
 
 internal actual fun isComposeNativeHostSharedLibraryRuntime(): Boolean {
     return WindowsComposeBridge.isSharedLibraryRuntime()
+}
+
+internal actual fun logPhaseTiming(name: String) {
+    WindowsComposeBridgeBindings.nativeHostLogPhaseTiming(name)
 }

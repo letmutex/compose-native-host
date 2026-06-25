@@ -17,3 +17,7 @@ expect fun isComposeNativeHostAvailable(): Boolean
  */
 internal expect fun isComposeNativeHostSharedLibraryRuntime(): Boolean
 
+/**
+ * Log phase timing metric to the native host environment.
+ */
+internal expect fun logPhaseTiming(name: String)

@@ -2,6 +2,7 @@ package letmutex.compose.nativehost
 
 import androidx.compose.runtime.Composable
 import letmutex.compose.nativehost.internal.MacOsComposeBridge
+import letmutex.compose.nativehost.internal.MacOsComposeBridgeBindings
 
 actual fun ComposeNativeHost(content: @Composable ComposeNativeHostScope.() -> Unit) {
     check(MacOsComposeBridge.isAvailable()) {
@@ -17,4 +18,8 @@ actual fun isComposeNativeHostAvailable(): Boolean {
 
 internal actual fun isComposeNativeHostSharedLibraryRuntime(): Boolean {
     return MacOsComposeBridge.isSharedLibraryRuntime()
+}
+
+internal actual fun logPhaseTiming(name: String) {
+    MacOsComposeBridgeBindings.nativeHostLogPhaseTiming(name)
 }
