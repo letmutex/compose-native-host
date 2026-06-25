@@ -126,7 +126,7 @@ fun createNativeBundleConfig(
         generatedInfoPlistDir = project.layout.buildDirectory.dir("generated/native-app").get().asFile,
         stagedAppBundlesDir = project.layout.buildDirectory.dir("native-app").get().asFile,
         appResourcesDir = project.layout.projectDirectory.dir("src/${jvmTargetName}Main/resources").asFile,
-        extraBundleContents = if (hostOsPrefix == "windows") emptyList() else extension.macos.bundleContents(),
+        extraBundleContents = if (hostOsPrefix == "windows") extension.windows.bundleContents() else extension.macos.bundleContents(),
         jvmArgs = extension.jvmArgs.getOrElse(emptyList()),
         mainClass = mainClass,
     )

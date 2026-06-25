@@ -221,10 +221,33 @@ abstract class ComposeNativeHostWindowsExtension
     ) {
         /** Swift launcher source directory used when compiling the native host app launcher. */
         val launcherSourcesDir: DirectoryProperty = objects.directoryProperty()
+        private val bundleContents = mutableListOf<ComposeNativeHostBundleContent>()
 
         init {
             launcherSourcesDir.convention(project.layout.projectDirectory.dir("src/windowsMain/cpp"))
         }
+
+        fun bundleContent(
+            from: Any,
+            into: String,
+            executable: Boolean = false,
+            builtBy: Any? = null,
+            runtimes: Set<ComposeNativeHostTargetRuntime> = ComposeNativeHostTargetRuntime.entries.toSet(),
+        ) {
+            val files = project.files(from)
+            if (builtBy != null) {
+                files.builtBy(builtBy)
+            }
+            bundleContents +=
+                ComposeNativeHostBundleContent(
+                    files = files,
+                    into = into,
+                    executable = executable,
+                    runtimes = runtimes.toSet(),
+                )
+        }
+
+        internal fun bundleContents(): List<ComposeNativeHostBundleContent> = bundleContents.toList()
     }
 
 data class ComposeNativeHostBundleContent(
