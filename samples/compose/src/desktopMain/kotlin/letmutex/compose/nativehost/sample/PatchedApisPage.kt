@@ -52,7 +52,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import letmutex.compose.nativehost.internal.MacOsComposeBridge
+import letmutex.compose.nativehost.isComposeNativeHostSharedLibraryRuntime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -94,7 +94,7 @@ internal fun PatchedApisPage(
             PendingStatus.copy(details = "Checks Dispatchers.Main.immediate and lifecycle's desktop override."),
         )
     }
-    val sharedLibraryRuntime = remember { MacOsComposeBridge.isSharedLibraryRuntime() }
+    val sharedLibraryRuntime = remember { isComposeNativeHostSharedLibraryRuntime() }
     val pointerPreviews =
         remember(sharedLibraryRuntime) {
             listOf(
