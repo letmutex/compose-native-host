@@ -23,15 +23,6 @@ private data class CachedRenderSurface(
     val surface: Surface,
 )
 
-internal fun interface RenderFrameCallback {
-    fun onFrameRendered(
-        refreshRate: Int,
-        dispatchDelayNanos: Long,
-        inputDrainNanos: Long,
-        renderStats: RenderFrameStats,
-    )
-}
-
 internal class ComposeMetalRenderThread(
     private val hostBridge: NativeHostBridge,
     private val renderFrameCallback: RenderFrameCallback,
