@@ -3,6 +3,8 @@ package letmutex.compose.nativehost.plugin
 import java.io.File
 import org.gradle.api.Project
 import org.gradle.jvm.tasks.Jar
+import org.gradle.api.plugins.ExtensionAware
+import org.gradle.api.file.RegularFileProperty
 
 data class NativeLauncherConfig(
     val appName: String,
@@ -16,6 +18,7 @@ data class NativeLauncherConfig(
     val generatedSwiftSourcesDir: File,
     val jvmArgsSwiftSourceFile: File,
     val outputFile: File,
+    val iconFile: File?,
 )
 
 data class NativeBundleConfig(
@@ -57,6 +60,11 @@ fun createNativeLauncherConfig(
 ): NativeLauncherConfig {
     val executableName = extension.executableName.requireValue("composeNativeHost.executableName")
     val extractedSourcesDir = project.layout.buildDirectory.dir("generated/compose-native-host/extracted-sources").get().asFile
+    val iconFile = if (hostOsPrefix == "windows") {
+        findComposeDesktopWindowsIconFile(project)
+    } else {
+        null
+    }
     return NativeLauncherConfig(
         appName = extension.appName.requireValue("composeNativeHost.appName"),
         executableName = executableName,
@@ -93,7 +101,29 @@ fun createNativeLauncherConfig(
         } else {
             project.layout.buildDirectory.file("bin/${executableName}Launcher").get().asFile
         },
+        iconFile = iconFile,
     )
+}
+
+private fun findComposeDesktopWindowsIconFile(project: Project): File? {
+    val composeExt = project.extensions.findByName("compose") ?: return null
+    val desktopExt = (composeExt as? ExtensionAware)
+        ?.extensions
+        ?.findByName("desktop")
+        ?: return null
+    return try {
+        val desktopClass = desktopExt::class.java
+        val appGetter = desktopClass.getMethod("getApplication")
+        val app = appGetter.invoke(desktopExt) // get lazy 'application'
+
+        val nativeDist = app::class.java.getMethod("getNativeDistributions").invoke(app)
+        val windows = nativeDist::class.java.getMethod("getWindows").invoke(nativeDist)
+        val iconFileProp = windows::class.java.getMethod("getIconFile").invoke(windows)
+        (iconFileProp as? RegularFileProperty)?.orNull?.asFile as File?
+    } catch (t: Throwable) {
+        println("w: compose-native-host plugin cannot resolve windows iconFile from compose plugin. Error: ${t.message}")
+        null
+    }
 }
 
 fun createNativeBundleConfig(

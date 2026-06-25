@@ -21,6 +21,9 @@ fun configureWindowsNativeLauncher(
         inputs.files(project.files(config.generatedSwiftSourcesDir).filter(File::exists))
         inputs.files(project.files(config.jvmArgsSwiftSourceFile).builtBy(generateJvmArgsSwiftSource))
         inputs.property("composeNativeHostJvmArgs", config.jvmArgs)
+        if (config.iconFile != null) {
+            inputs.file(config.iconFile)
+        }
         outputs.file(config.outputFile)
 
         doFirst {
@@ -30,6 +33,14 @@ fun configureWindowsNativeLauncher(
             val jniWinHeadersDir = File(config.javaHome, "include/win32").absolutePath
             val objDir = project.layout.buildDirectory.dir("tmp/native-obj/launcher").get().asFile
             objDir.mkdirs()
+
+            val rcFile = File(objDir, "app.rc")
+            val resFile = File(objDir, "app.res")
+            if (config.iconFile != null) {
+                val iconPathEscaped = config.iconFile.absolutePath.replace("\\", "\\\\")
+                rcFile.writeText("1 ICON \"$iconPathEscaped\"\n")
+            }
+
             val compileCmd = buildString {
                 if (!isEnvActive) {
                     val vcvars64 = locateVcvars64(project).absolutePath
@@ -37,11 +48,23 @@ fun configureWindowsNativeLauncher(
                     append(vcvars64)
                     append("\" && ")
                 }
+                if (config.iconFile != null) {
+                    append("rc.exe /nologo /fo \"")
+                    append(resFile.absolutePath)
+                    append("\" \"")
+                    append(rcFile.absolutePath)
+                    append("\" && ")
+                }
                 append("cl.exe /nologo /EHsc /O2 ")
                 val sources = config.launcherSources + cppSources(File(config.extractedSourcesDir, "cpp"))
                 sources.forEach { source ->
                     append("\"")
                     append(source.absolutePath)
+                    append("\" ")
+                }
+                if (config.iconFile != null) {
+                    append("\"")
+                    append(resFile.absolutePath)
                     append("\" ")
                 }
                 append("/Fe:\"")
