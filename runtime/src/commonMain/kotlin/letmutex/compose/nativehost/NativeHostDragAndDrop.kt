@@ -2,15 +2,25 @@ package letmutex.compose.nativehost
 
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTransferAction
 import androidx.compose.ui.geometry.Offset
 
-internal enum class NativeHostDragDataKind {
+@OptIn(ExperimentalComposeUiApi::class)
+fun dragAndDropActionFromRaw(rawValue: Int): DragAndDropTransferAction? =
+    when (rawValue) {
+        2 -> DragAndDropTransferAction.Move
+        3 -> DragAndDropTransferAction.Link
+        1 -> DragAndDropTransferAction.Copy
+        else -> null
+    }
+
+enum class NativeHostDragDataKind {
     FilesList,
     Text,
     Image,
 }
 
-internal data class NativeHostDragData(
+data class NativeHostDragData(
     val kind: NativeHostDragDataKind? = null,
     val files: List<String> = emptyList(),
     val text: String? = null,
@@ -21,7 +31,7 @@ internal data class NativeHostDragData(
         get() = files.isNotEmpty() || text != null || imageBytes != null
 }
 
-internal data class NativeHostDragAndDropEvent(
+data class NativeHostDragAndDropEvent(
     val positionInRoot: Offset,
     val data: NativeHostDragData,
 )

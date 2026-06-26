@@ -5,7 +5,17 @@ import letmutex.compose.nativehost.WindowInfo
 
 internal class MacOsComposeBridge(
     private val runtimeId: Long,
-) {
+) : NativeHostBridge {
+    override fun isAvailable(): Boolean = Companion.isAvailable()
+
+    override fun isSharedLibraryRuntime(): Boolean = Companion.isSharedLibraryRuntime()
+
+    override fun getAdapterPtr(): Long = 0L
+
+    override fun getDevicePtr(): Long = metalDevicePtr()
+
+    override fun getQueuePtr(): Long = metalQueuePtr()
+
     init {
         check(isAvailable()) {
             "MacOsComposeBridge requires the native host bridge to be loaded."
@@ -74,7 +84,7 @@ internal class MacOsComposeBridge(
     fun waitForWindowAttached(): Boolean =
         MacOsComposeBridgeBindings.nativeHostWaitForWindowAttached(runtimeId)
 
-    fun currentWindowInfo(): WindowInfo? =
+    override fun currentWindowInfo(): WindowInfo? =
         WindowInfo.fromPacked(
             MacOsComposeBridgeBindings.nativeHostGetWindowInfo(runtimeId)
         )
@@ -82,7 +92,7 @@ internal class MacOsComposeBridge(
     fun isProfileRenderingEnabled(): Boolean =
         MacOsComposeBridgeBindings.nativeHostProfileRenderingEnabled(runtimeId)
 
-    fun pollFrameState(): NativeFrameState? {
+    override fun pollFrameState(): NativeFrameState? {
         val hasFrameState =
             MacOsComposeBridgeBindings.nativeHostPollFrameState(
                 runtimeId = runtimeId,
@@ -92,15 +102,15 @@ internal class MacOsComposeBridge(
         return if (hasFrameState) frameStateBuffer else null
     }
 
-    fun requestRender() {
+    override fun requestRender() {
         MacOsComposeBridgeBindings.nativeHostRequestRenderTick(runtimeId)
     }
 
-    fun setPointerIcon(cursorType: Int) {
+    override fun setPointerIcon(cursorType: Int) {
         MacOsComposeBridgeBindings.nativeHostSetPointerIcon(runtimeId, cursorType)
     }
 
-    fun updateTextInputGeometry(geometry: TextInputGeometry?) {
+    override fun updateTextInputGeometry(geometry: TextInputGeometry?) {
         if (geometry == null) {
             MacOsComposeBridgeBindings.nativeHostClearTextInputGeometry(runtimeId)
             return
@@ -124,25 +134,30 @@ internal class MacOsComposeBridge(
     fun metalQueuePtr(): Long =
         MacOsComposeBridgeBindings.nativeHostMetalQueuePtr(runtimeId)
 
-    fun acquireDrawableTexturePtr(): Long =
+    override fun acquireDrawableTexturePtr(): Long =
         MacOsComposeBridgeBindings.nativeHostAcquireDrawableTexturePtr(runtimeId)
 
-    fun presentDrawable() {
+    override fun presentDrawable() {
         MacOsComposeBridgeBindings.nativeHostPresentDrawable(runtimeId)
     }
 
-    fun emitAppEvent(
+    override fun emitAppEvent(
         name: String,
-        payload: String? = null,
+        payload: String?,
     ) {
         MacOsComposeBridgeBindings.nativeHostEmitAppEvent(runtimeId, name, payload)
     }
+
+    override fun performWindowDrag() {}
+    override fun minimizeWindow() {}
+    override fun maximizeWindow() {}
+    override fun closeWindow() {}
 
     fun logPhaseTiming(name: String) {
         MacOsComposeBridgeBindings.nativeHostLogPhaseTiming(name)
     }
 
-    fun emitProfileFrameSample(
+    override fun emitProfileFrameSample(
         refreshRate: Int,
         rendered: Boolean,
         dispatchDelayMicros: Int,

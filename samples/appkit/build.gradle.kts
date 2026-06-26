@@ -9,13 +9,18 @@ plugins {
 }
 
 kotlin {
-    jvm("desktop")
+    jvm("macos")
 
     sourceSets {
-        val desktopMain by getting {
+        val commonMain by getting
+        val desktopMain by creating {
+            dependsOn(commonMain)
             dependencies {
                 implementation(project(":compose"))
             }
+        }
+        val macosMain by getting {
+            dependsOn(desktopMain)
         }
     }
 }
@@ -28,6 +33,7 @@ val composePackageName = "ComposeNativeHostAppKit"
 val composePackageVersion = "1.0.0"
 
 composeNativeHost {
+    jvmTargetName.set("macos")
     appName.set("Compose Native Host AppKit")
     bundleIdentifier.set("letmutex.compose.nativehost.sample.appkit")
     nativeImage {
@@ -48,3 +54,4 @@ compose.desktop {
         buildTypes.release.proguard { isEnabled.set(false) }
     }
 }
+

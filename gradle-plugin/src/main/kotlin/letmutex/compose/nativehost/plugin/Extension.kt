@@ -1,5 +1,6 @@
 package letmutex.compose.nativehost.plugin
 
+import java.util.Locale
 import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.gradle.api.file.ConfigurableFileCollection
@@ -28,6 +29,9 @@ abstract class ComposeNativeHostPluginExtension
         /** macOS-specific bundle, signing, and launcher source settings. */
         val macos: ComposeNativeHostMacOsExtension =
             objects.newInstance(ComposeNativeHostMacOsExtension::class.java, objects, project, appName, executableName)
+        /** Windows-specific launcher source settings. */
+        val windows: ComposeNativeHostWindowsExtension =
+            objects.newInstance(ComposeNativeHostWindowsExtension::class.java, objects, project, appName, executableName)
         /** GraalVM native-image shared-library settings for the hosted runtime. */
         val nativeImage: ComposeNativeHostNativeImageExtension =
             objects.newInstance(
@@ -47,6 +51,10 @@ abstract class ComposeNativeHostPluginExtension
 
         fun macos(configure: ComposeNativeHostMacOsExtension.() -> Unit) {
             macos.configure()
+        }
+
+        fun windows(configure: ComposeNativeHostWindowsExtension.() -> Unit) {
+            windows.configure()
         }
 
         fun nativeImage(configure: ComposeNativeHostNativeImageExtension.() -> Unit) {
@@ -105,14 +113,17 @@ abstract class ComposeNativeHostNativeImageExtension
             )
             includeResourcePatterns.value(
                 listOf(
-                    "libskiko-.*\\.sha256",
+                    ".*skiko-.*\\.sha256",
                     "composeResources/.*",
                 ),
             )
+            val isWindows = System.getProperty("os.name").lowercase(Locale.US).contains("win")
             collectedSharedLibraryPatterns.value(
-                listOf(
-                    ".*libskiko-macos-.*\\.dylib",
-                ),
+                if (isWindows) {
+                    listOf(".*skiko-windows-.*\\.dll")
+                } else {
+                    listOf(".*libskiko-macos-.*\\.dylib")
+                }
             )
             preservePackages.value(
                 listOf(
@@ -175,6 +186,45 @@ abstract class ComposeNativeHostMacOsExtension
             minimumSystemVersion.convention("13.0")
             codeSignIdentity.convention("-")
             launcherSourcesDir.convention(project.layout.projectDirectory.dir("src/macosMain/swift"))
+        }
+
+        fun bundleContent(
+            from: Any,
+            into: String,
+            executable: Boolean = false,
+            builtBy: Any? = null,
+            runtimes: Set<ComposeNativeHostTargetRuntime> = ComposeNativeHostTargetRuntime.entries.toSet(),
+        ) {
+            val files = project.files(from)
+            if (builtBy != null) {
+                files.builtBy(builtBy)
+            }
+            bundleContents +=
+                ComposeNativeHostBundleContent(
+                    files = files,
+                    into = into,
+                    executable = executable,
+                    runtimes = runtimes.toSet(),
+                )
+        }
+
+        internal fun bundleContents(): List<ComposeNativeHostBundleContent> = bundleContents.toList()
+    }
+
+abstract class ComposeNativeHostWindowsExtension
+    @Inject
+    constructor(
+        objects: ObjectFactory,
+        private val project: Project,
+        appName: Property<String>,
+        executableName: Property<String>,
+    ) {
+        /** Swift launcher source directory used when compiling the native host app launcher. */
+        val launcherSourcesDir: DirectoryProperty = objects.directoryProperty()
+        private val bundleContents = mutableListOf<ComposeNativeHostBundleContent>()
+
+        init {
+            launcherSourcesDir.convention(project.layout.projectDirectory.dir("src/windowsMain/cpp"))
         }
 
         fun bundleContent(

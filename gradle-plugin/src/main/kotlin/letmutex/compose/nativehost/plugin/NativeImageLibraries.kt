@@ -16,8 +16,8 @@ internal fun registerNativeImageExtractHostLibrariesTask(
 ): TaskProvider<Task> =
     project.tasks.register(
         when (flavor) {
-            NativeImageSharedLibraryFlavor.Dev -> "macosNativeImageExtractDevLibraries"
-            NativeImageSharedLibraryFlavor.Bundle -> "macosNativeImageExtractBundleLibraries"
+            NativeImageSharedLibraryFlavor.Dev -> "${hostOsPrefix}NativeImageExtractDevLibraries"
+            NativeImageSharedLibraryFlavor.Bundle -> "${hostOsPrefix}NativeImageExtractBundleLibraries"
         },
     ) {
         group = "build"

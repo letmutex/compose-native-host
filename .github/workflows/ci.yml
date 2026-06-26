@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build-macos:
     runs-on: macos-latest
     timeout-minutes: 45
 
@@ -42,3 +42,30 @@ jobs:
 
       - name: Build minimal native-image sample bundle
         run: ./gradlew -p samples :swiftui-min:macosNativeImageStageAppBundle
+
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up GraalVM 25
+        uses: graalvm/setup-graalvm@v1
+        with:
+          distribution: graalvm
+          java-version: "25"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify toolchain
+        run: java --version
+
+      - name: Run root checks
+        run: ./gradlew check
+
+      - name: Build Windows Mixed Sample Launcher
+        run: ./gradlew -p samples :mixed:windowsBuildLauncher

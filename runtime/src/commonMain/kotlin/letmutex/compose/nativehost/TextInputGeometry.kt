@@ -1,6 +1,6 @@
 package letmutex.compose.nativehost
 
-internal data class TextInputGeometry(
+data class TextInputGeometry(
     val focusedRectLeft: Float,
     val focusedRectTop: Float,
     val focusedRectRight: Float,

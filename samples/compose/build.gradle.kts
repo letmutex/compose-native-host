@@ -8,18 +8,36 @@ plugins {
     id("org.jetbrains.compose")
 }
 
+val hostOs = when {
+    System.getProperty("os.name").lowercase().contains("win") -> "windows"
+    System.getProperty("os.name").lowercase().contains("mac") -> "macos"
+    else -> "desktop"
+}
+
 kotlin {
-    jvm("desktop")
+    jvm(hostOs)
 
     sourceSets {
-        val desktopMain by getting {
+        val commonMain by getting
+        val desktopMain = maybeCreate("desktopMain").apply {
+            dependsOn(commonMain)
             dependencies {
                 implementation("io.github.letmutex.compose-native-host:runtime")
                 implementation(libs.compose.runtime)
+                implementation(libs.compose.ui)
                 implementation(libs.compose.foundation)
                 implementation(libs.compose.material3)
-                implementation(libs.compose.ui)
                 implementation(compose.desktop.currentOs)
+            }
+        }
+        if (hostOs == "windows") {
+            val windowsMain by getting {
+                dependsOn(desktopMain)
+            }
+        }
+        if (hostOs == "macos") {
+            val macosMain by getting {
+                dependsOn(desktopMain)
             }
         }
     }
@@ -40,3 +58,4 @@ compose.desktop {
         }
     }
 }
+

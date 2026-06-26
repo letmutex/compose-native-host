@@ -10,14 +10,19 @@ plugins {
 }
 
 kotlin {
-    jvm("desktop")
+    jvm("macos")
 
     sourceSets {
-        val desktopMain by getting {
+        val commonMain by getting
+        val desktopMain by creating {
+            dependsOn(commonMain)
             dependencies {
                 implementation("io.github.letmutex.compose-native-host:runtime")
                 implementation(compose.desktop.currentOs)
             }
+        }
+        val macosMain by getting {
+            dependsOn(desktopMain)
         }
     }
 }
@@ -30,6 +35,7 @@ val composePackageName = "Sample"
 val composePackageVersion = "1.0.0"
 
 composeNativeHost {
+    jvmTargetName.set("macos")
     appName.set("Sample")
     bundleIdentifier.set("example.sample")
     nativeImage {
@@ -53,3 +59,4 @@ compose.desktop {
         buildTypes.release.proguard { isEnabled.set(false) }
     }
 }
+
