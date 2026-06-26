@@ -331,9 +331,11 @@ private class TestFixtureProject(
         )
     }
 
-    fun stagedRuntimeDir(): Path =
-        rootDir /
-            "build/generated/compose-native-host/runtime-classpath/TestApp.app"
+    fun stagedRuntimeDir(): Path {
+        val isWindows = System.getProperty("os.name").lowercase().contains("win")
+        val bundleName = if (isWindows) "TestApp" else "TestApp.app"
+        return rootDir / "build/generated/compose-native-host/runtime-classpath" / bundleName
+    }
 
     fun runtimeJarMap(): Path =
         stagedRuntimeDir().resolve("runtime-jars.map")
