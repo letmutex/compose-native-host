@@ -19,7 +19,7 @@ kotlin {
 
     sourceSets {
         val commonMain by getting
-        val desktopMain by creating {
+        val desktopMain = maybeCreate("desktopMain").apply {
             dependsOn(commonMain)
             dependencies {
                 implementation(project(":compose"))

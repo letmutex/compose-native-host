@@ -25,7 +25,7 @@ kotlin {
                 implementation(libs.jctools.core)
             }
         }
-        val desktopMain by creating {
+        val desktopMain = maybeCreate("desktopMain").apply {
             dependsOn(commonMain)
         }
         if (hostOs == "windows") {
@@ -52,7 +52,7 @@ kotlin {
             }
         }
 
-        val desktopTest by creating {
+        val desktopTest = maybeCreate("desktopTest").apply {
             dependsOn(commonTest)
         }
         if (hostOs == "windows") {

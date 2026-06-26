@@ -227,6 +227,7 @@ internal class ComposeMetalRenderer(
     override fun close() {
         renderThread.close()
         scene?.close()
+        recorder.close()
         scene = null
         currentWindowInfo = null
     }
