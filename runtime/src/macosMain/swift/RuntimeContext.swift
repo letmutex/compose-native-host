@@ -272,8 +272,19 @@ final class ComposeHostRuntimeState {
     let metrics = WindowMetricsStore()
     let attachment = WindowAttachmentState()
     private let preparation = RuntimePreparationState()
-    lazy var inputEvents = InputEventStore { [weak self] in
-        self?.requestRenderTick()
+    private let inputEventsLock = NSLock()
+    private var inputEventsStore: InputEventStore?
+    var inputEvents: InputEventStore {
+        inputEventsLock.lock()
+        defer { inputEventsLock.unlock() }
+        if let inputEventsStore {
+            return inputEventsStore
+        }
+        let store = InputEventStore { [weak self] in
+            self?.requestRenderTick()
+        }
+        inputEventsStore = store
+        return store
     }
 
     private let lock = NSLock()
