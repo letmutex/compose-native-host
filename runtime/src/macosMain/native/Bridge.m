@@ -303,7 +303,7 @@ Java_letmutex_compose_nativehost_internal_MacOsComposeBridgeBindings_nativeHostP
     }
 
     const NativeFrameStateJniCache *cache = &nativeFrameStateJniCache;
-    const jint recordStride = 10;
+    const jint recordStride = nativeHostInputEventRecordStride();
     jsize capacity = maxCount;
     jlongArray recordsArray = (jlongArray)(*env)->GetObjectField(env, frameState, cache->recordsField);
     jobjectArray texts = (jobjectArray)(*env)->GetObjectField(env, frameState, cache->textsField);
