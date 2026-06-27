@@ -380,9 +380,15 @@ final class ComposeJvmHost {
         jvmRaw: UnsafeMutableRawPointer,
         block: (UnsafeMutableRawPointer) -> Void
     ) {
+        let getEnvIndex = 6
         let attachCurrentThreadIndex = 4
         let detachCurrentThreadIndex = 5
 
+        typealias GetEnv = @convention(c) (
+            UnsafeMutableRawPointer,
+            UnsafeMutablePointer<UnsafeMutableRawPointer?>?,
+            jint
+        ) -> jint
         typealias AttachCurrentThread = @convention(c) (
             UnsafeMutableRawPointer,
             UnsafeMutablePointer<UnsafeMutableRawPointer?>?,
@@ -391,16 +397,27 @@ final class ComposeJvmHost {
         typealias DetachCurrentThread = @convention(c) (UnsafeMutableRawPointer) -> jint
 
         let invokePtr = jvmRaw.assumingMemoryBound(to: UnsafePointer<UnsafeRawPointer?>.self).pointee
+        let getEnv = unsafeBitCast(invokePtr[getEnvIndex], to: GetEnv.self)
         let attach = unsafeBitCast(invokePtr[attachCurrentThreadIndex], to: AttachCurrentThread.self)
         let detach = unsafeBitCast(invokePtr[detachCurrentThreadIndex], to: DetachCurrentThread.self)
 
         var envRaw: UnsafeMutableRawPointer?
-        let attachResult = attach(jvmRaw, &envRaw, nil)
-        if attachResult != 0 || envRaw == nil {
-            fputs("AttachCurrentThread failed: \(attachResult)\n", stderr)
-            return
+        var didAttach = false
+        let getEnvResult = getEnv(jvmRaw, &envRaw, jint(0x00010008))
+        if getEnvResult != 0 || envRaw == nil {
+            envRaw = nil
+            let attachResult = attach(jvmRaw, &envRaw, nil)
+            if attachResult != 0 || envRaw == nil {
+                fputs("AttachCurrentThread failed: \(attachResult)\n", stderr)
+                return
+            }
+            didAttach = true
         }
-        defer { _ = detach(jvmRaw) }
+        defer {
+            if didAttach {
+                _ = detach(jvmRaw)
+            }
+        }
 
         block(envRaw!)
     }
