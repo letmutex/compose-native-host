@@ -5,6 +5,7 @@
 #include <memory>
 #include <algorithm>
 #include <thread>
+#include <mutex>
 #include <objidl.h>
 
 #define WM_OPEN_WINDOW (WM_USER + 1)
@@ -17,6 +18,7 @@ struct SampleWindow {
 };
 
 std::vector<std::shared_ptr<SampleWindow>> g_ActiveWindows;
+std::mutex g_ActiveWindowsMutex;
 HINSTANCE g_hInstance = nullptr;
 bool g_IsComposeInitialized = false;
 
@@ -24,6 +26,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 void CreateSampleWindow();
 
 std::shared_ptr<SampleWindow> GetSampleWindow(HWND hwnd) {
+    std::lock_guard<std::mutex> lock(g_ActiveWindowsMutex);
     for (auto& window : g_ActiveWindows) {
         if (window->hwnd == hwnd) {
             return window;
@@ -34,6 +37,7 @@ std::shared_ptr<SampleWindow> GetSampleWindow(HWND hwnd) {
 
 
 void OnComposeEvent(HCOMPOSERUNTIME runtime, const char* name, const char* payload, void* userData) {
+    if (!name) return;
     std::cout << "[C++ Callback] Event received: " << name << ", payload: " << (payload ? payload : "null") << std::endl;
     if (strcmp(name, "phaseChanged") == 0 && payload && strcmp(payload, "firstFramePresented") == 0) {
         HWND hwnd = (HWND)userData;
@@ -94,9 +98,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         };
         if (ComposeHostInitialize(hostConfig)) {
             g_IsComposeInitialized = true;
-            // Tell the main thread to create the compose runtimes
-            for (auto& window : g_ActiveWindows) {
-                PostMessageW(window->hwnd, WM_INIT_COMPOSE, 0, 0);
+            // Tell the main thread to create the compose runtimes.
+            // Snapshot the windows under the lock so we don't iterate a vector
+            // that the UI thread may be mutating concurrently.
+            std::vector<HWND> hwnds;
+            {
+                std::lock_guard<std::mutex> lock(g_ActiveWindowsMutex);
+                for (auto& window : g_ActiveWindows) {
+                    hwnds.push_back(window->hwnd);
+                }
+            }
+            for (HWND hwnd : hwnds) {
+                PostMessageW(hwnd, WM_INIT_COMPOSE, 0, 0);
             }
         } else {
             std::cerr << "Failed to initialize Compose Host" << std::endl;
@@ -157,7 +170,10 @@ void CreateSampleWindow() {
 
     auto window = std::make_shared<SampleWindow>();
     window->hwnd = hwnd;
-    g_ActiveWindows.push_back(window);
+    {
+        std::lock_guard<std::mutex> lock(g_ActiveWindowsMutex);
+        g_ActiveWindows.push_back(window);
+    }
 
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
@@ -240,16 +256,26 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 0;
         }
         case WM_DESTROY: {
-            for (auto it = g_ActiveWindows.begin(); it != g_ActiveWindows.end(); ++it) {
-                if ((*it)->hwnd == hwnd) {
-                    if ((*it)->runtime) {
-                        ComposeRuntimeDestroy((*it)->runtime);
+            HCOMPOSERUNTIME runtimeToDestroy = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(g_ActiveWindowsMutex);
+                for (auto it = g_ActiveWindows.begin(); it != g_ActiveWindows.end(); ++it) {
+                    if ((*it)->hwnd == hwnd) {
+                        runtimeToDestroy = (*it)->runtime;
+                        g_ActiveWindows.erase(it);
+                        break;
                     }
-                    g_ActiveWindows.erase(it);
-                    break;
                 }
             }
-            if (g_ActiveWindows.empty()) {
+            if (runtimeToDestroy) {
+                ComposeRuntimeDestroy(runtimeToDestroy);
+            }
+            bool empty;
+            {
+                std::lock_guard<std::mutex> lock(g_ActiveWindowsMutex);
+                empty = g_ActiveWindows.empty();
+            }
+            if (empty) {
                 PostQuitMessage(0);
             }
             return 0;

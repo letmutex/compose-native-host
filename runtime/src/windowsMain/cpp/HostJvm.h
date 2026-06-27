@@ -76,9 +76,14 @@ struct RuntimeState {
     jobject jvmRuntimeRef = nullptr;
     int64_t graalRuntimeHandle = 0;
 
-    // Running flag and thread for this runtime
-    bool isRunning = true;
+    // Running flag and thread for this runtime. Read by the render thread and
+    // written by the UI thread (under `lock`), so it must be atomic.
+    std::atomic<bool> isRunning{true};
     std::thread renderThread;
+
+    // Pending UTF-16 high surrogate awaiting its low surrogate to form a
+    // complete code point from a pair of WM_CHAR messages.
+    wchar_t pendingHighSurrogate = 0;
 
     std::atomic<ComposeRuntimeEventCallback> eventCallback{nullptr};
     std::atomic<void*> eventUserData{nullptr};
@@ -97,7 +102,7 @@ public:
     std::shared_ptr<RuntimeState> GetRuntimeByHwnd(HWND hwnd);
 
     bool PrepareRuntime(int64_t runtimeId, const std::string& mainClassName, bool profileEnabled = false);
-    void RunRenderLoop(int64_t runtimeId, bool* isHostRunning);
+    void RunRenderLoop(int64_t runtimeId, std::atomic<bool>* isHostRunning);
     void Shutdown();
 
     // Drag and Drop public wrapper methods

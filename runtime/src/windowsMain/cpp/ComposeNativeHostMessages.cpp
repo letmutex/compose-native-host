@@ -58,28 +58,36 @@ static bool HandlePaint(const std::shared_ptr<RuntimeState>& state) {
     return false;
 }
 
+static HCURSOR GetCachedCursor(int32_t cursorType) {
+    struct CursorCache {
+        HCURSOR handles[14];
+        CursorCache() {
+            handles[0]  = LoadCursor(NULL, IDC_ARROW);
+            handles[1]  = LoadCursor(NULL, IDC_CROSS);
+            handles[2]  = LoadCursor(NULL, IDC_IBEAM);
+            handles[3]  = LoadCursor(NULL, IDC_WAIT);
+            handles[4]  = LoadCursor(NULL, IDC_SIZENESW);
+            handles[5]  = LoadCursor(NULL, IDC_SIZENWSE);
+            handles[6]  = LoadCursor(NULL, IDC_SIZENWSE);
+            handles[7]  = LoadCursor(NULL, IDC_SIZENESW);
+            handles[8]  = LoadCursor(NULL, IDC_SIZENS);
+            handles[9]  = LoadCursor(NULL, IDC_SIZENS);
+            handles[10] = LoadCursor(NULL, IDC_SIZEWE);
+            handles[11] = LoadCursor(NULL, IDC_SIZEWE);
+            handles[12] = LoadCursor(NULL, IDC_HAND);
+            handles[13] = LoadCursor(NULL, IDC_SIZEALL);
+        }
+    };
+    static const CursorCache cache;
+    if (cursorType >= 0 && cursorType < 14) {
+        return cache.handles[cursorType];
+    }
+    return cache.handles[0];
+}
+
 static bool HandleSetCursor(const std::shared_ptr<RuntimeState>& state, LPARAM lParam) {
     if (LOWORD(lParam) == HTCLIENT) {
-        int32_t cursorType = state->currentCursorType.load();
-        LPCTSTR cursorName = IDC_ARROW;
-        switch (cursorType) {
-            case 0: cursorName = IDC_ARROW; break;
-            case 1: cursorName = IDC_CROSS; break;
-            case 2: cursorName = IDC_IBEAM; break;
-            case 3: cursorName = IDC_WAIT; break;
-            case 4: cursorName = IDC_SIZENESW; break;
-            case 5: cursorName = IDC_SIZENWSE; break;
-            case 6: cursorName = IDC_SIZENWSE; break;
-            case 7: cursorName = IDC_SIZENESW; break;
-            case 8: cursorName = IDC_SIZENS; break;
-            case 9: cursorName = IDC_SIZENS; break;
-            case 10: cursorName = IDC_SIZEWE; break;
-            case 11: cursorName = IDC_SIZEWE; break;
-            case 12: cursorName = IDC_HAND; break;
-            case 13: cursorName = IDC_SIZEALL; break;
-        }
-        HCURSOR hCursor = LoadCursor(NULL, cursorName);
-        SetCursor(hCursor);
+        SetCursor(GetCachedCursor(state->currentCursorType.load()));
         return true;
     }
     return false;
@@ -237,17 +245,36 @@ static bool HandleKey(const std::shared_ptr<RuntimeState>& state, UINT message, 
 
 static bool HandleChar(const std::shared_ptr<RuntimeState>& state, WPARAM wParam) {
     wchar_t ch = (wchar_t)wParam;
-    if (ch >= 0x20 && ch != 0x7F) {
-        TextEventRecord record = {};
-        record.eventType = textInputEventTypeCommit;
-        record.timestampMillis = GetTickCount64();
-
-        std::wstring wstr(1, ch);
-        std::string strUtf8 = WideToUtf8(wstr);
-
-        record.text = strUtf8;
-        state->inputEvents.EnqueueText(record);
+    // Build the full UTF-16 code point, handling surrogate pairs. Windows sends
+    // a high surrogate followed by a low surrogate as two separate WM_CHAR
+    // messages for astral-plane characters (e.g. emoji).
+    if (ch >= 0xD800 && ch <= 0xDBFF) {
+        state->pendingHighSurrogate = ch;
+        return true;
     }
+    std::wstring wstr;
+    if (ch >= 0xDC00 && ch <= 0xDFFF) {
+        if (state->pendingHighSurrogate != 0) {
+            wstr.push_back(state->pendingHighSurrogate);
+            wstr.push_back(ch);
+            state->pendingHighSurrogate = 0;
+        } else {
+            // Stray low surrogate; nothing useful to commit.
+            return true;
+        }
+    } else {
+        state->pendingHighSurrogate = 0;
+        if (ch < 0x20 || ch == 0x7F) {
+            return true;
+        }
+        wstr.push_back(ch);
+    }
+
+    TextEventRecord record = {};
+    record.eventType = textInputEventTypeCommit;
+    record.timestampMillis = GetTickCount64();
+    record.text = WideToUtf8(wstr);
+    state->inputEvents.EnqueueText(record);
     return true;
 }
 
