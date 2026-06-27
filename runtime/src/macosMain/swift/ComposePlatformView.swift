@@ -337,13 +337,13 @@ final class ComposePlatformView: NSView, NSTextInputClient {
     }
 
     private func encodedDroppedImage(from pasteboard: NSPasteboard) -> Data? {
-        if let image = (pasteboard.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage])?.first,
-           let tiffData = image.tiffRepresentation,
+        if let tiffData = pasteboard.data(forType: .tiff),
            let bitmap = NSBitmapImageRep(data: tiffData),
            let pngData = bitmap.representation(using: .png, properties: [:]) {
             return pngData
         }
-        if let tiffData = pasteboard.data(forType: .tiff),
+        if let image = (pasteboard.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage])?.first,
+           let tiffData = image.tiffRepresentation,
            let bitmap = NSBitmapImageRep(data: tiffData),
            let pngData = bitmap.representation(using: .png, properties: [:]) {
             return pngData
