@@ -175,6 +175,7 @@ func loadSystemClass(
     callObjectMethodA: JniCallObjectMethodA,
     callStaticObjectMethodA: JniCallStaticObjectMethodA,
     newStringUTF: JniNewStringUTF,
+    deleteLocalRef: JniDeleteLocalRef,
     className: String
 ) -> UnsafeMutableRawPointer? {
     guard let classLoaderClass = findClass(envRaw, "java/lang/ClassLoader"),
@@ -196,7 +197,14 @@ func loadSystemClass(
             "(Ljava/lang/String;)Ljava/lang/Class;"
           ),
           let jClassName = newStringUTF(envRaw, className) else {
+        deleteLocalRef(envRaw, classLoader)
+        deleteLocalRef(envRaw, classLoaderClass)
         return nil
+    }
+    defer {
+        deleteLocalRef(envRaw, classLoaderClass)
+        deleteLocalRef(envRaw, classLoader)
+        deleteLocalRef(envRaw, jClassName)
     }
 
     let loadArgs = [jvalue(l: jClassName)]

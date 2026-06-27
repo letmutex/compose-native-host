@@ -576,6 +576,17 @@ final class ComposeJvmHost {
             &currentRuntimeArgs
         )
         let emptyArgs = newObjectArray(envRaw, 0, stringClass, nil)
+        defer {
+            deleteLocalRef(envRaw, mainClassResolution.classRef)
+            deleteLocalRef(envRaw, stringClass)
+            if let emptyArgs {
+                deleteLocalRef(envRaw, emptyArgs)
+            }
+        }
+        guard let emptyArgs else {
+            lifecycleListener.mainInvocationFailed(mainClassName: mainClassName)
+            return false
+        }
         var mainArgs = jvalue(l: emptyArgs)
         callStaticVoidMethodA(
             envRaw,
@@ -896,6 +907,7 @@ final class ComposeJvmHost {
             callObjectMethodA: callObjectMethodA,
             callStaticObjectMethodA: callStaticObjectMethodA,
             newStringUTF: newStringUTF,
+            deleteLocalRef: deleteLocalRef,
             className: className
         ) else {
             return nil
