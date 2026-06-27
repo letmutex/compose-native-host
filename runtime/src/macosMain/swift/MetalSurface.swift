@@ -44,7 +44,7 @@ final class MetalSurface {
             layer.device = resolvedDevice
             layer.pixelFormat = .bgra8Unorm
             layer.framebufferOnly = true
-            layer.allowsNextDrawableTimeout = true
+            layer.allowsNextDrawableTimeout = false
             layer.contentsGravity = .topLeft
             layer.isOpaque = opaqueSurface
             layer.backgroundColor = opaqueSurface ? nil : NSColor.clear.cgColor
