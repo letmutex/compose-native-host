@@ -8,38 +8,45 @@ bool HostJvm::PrepareRuntime(int64_t runtimeId, const std::string& mainClassName
 
     bool prepared = false;
     WithAttachedEnv([&](JNIEnv* env) {
-        jclass runtimeClassLocal = env->FindClass("letmutex/compose/nativehost/ComposeRuntime");
-        if (!runtimeClassLocal) {
-            std::cerr << "Could not find letmutex.compose.nativehost.ComposeRuntime class." << std::endl;
-            return;
-        }
+        {
+            std::lock_guard<std::mutex> lock(lock_);
+            if (runtimeClass_ == nullptr) {
+                jclass runtimeClassLocal = env->FindClass("letmutex/compose/nativehost/ComposeRuntime");
+                if (!runtimeClassLocal) {
+                    std::cerr << "Could not find letmutex.compose.nativehost.ComposeRuntime class." << std::endl;
+                    return;
+                }
 
-        runtimeClass_ = (jclass)env->NewGlobalRef(runtimeClassLocal);
-        env->DeleteLocalRef(runtimeClassLocal);
+                runtimeClass_ = (jclass)env->NewGlobalRef(runtimeClassLocal);
+                env->DeleteLocalRef(runtimeClassLocal);
 
-        initializeMethod_ = env->GetStaticMethodID(runtimeClass_, "initialize", "()V");
-        enterCurrentRuntimeMethod_ = env->GetStaticMethodID(runtimeClass_, "enterCurrentRuntime", "(Lletmutex/compose/nativehost/ComposeRuntime;)V");
-        exitCurrentRuntimeMethod_ = env->GetStaticMethodID(runtimeClass_, "exitCurrentRuntime", "()V");
-        constructorMethod_ = env->GetMethodID(runtimeClass_, "<init>", "(JZ)V");
-        isContentBoundMethod_ = env->GetMethodID(runtimeClass_, "isContentBound", "()Z");
-        startRuntimeMethod_ = env->GetMethodID(runtimeClass_, "startRuntime", "()V");
-        requestFrameMethod_ = env->GetMethodID(runtimeClass_, "requestFrame", "(J)V");
-        closeRuntimeMethod_ = env->GetMethodID(runtimeClass_, "closeRuntime", "()V");
+                initializeMethod_ = env->GetStaticMethodID(runtimeClass_, "initialize", "()V");
+                enterCurrentRuntimeMethod_ = env->GetStaticMethodID(runtimeClass_, "enterCurrentRuntime", "(Lletmutex/compose/nativehost/ComposeRuntime;)V");
+                exitCurrentRuntimeMethod_ = env->GetStaticMethodID(runtimeClass_, "exitCurrentRuntime", "()V");
+                constructorMethod_ = env->GetMethodID(runtimeClass_, "<init>", "(JZ)V");
+                isContentBoundMethod_ = env->GetMethodID(runtimeClass_, "isContentBound", "()Z");
+                startRuntimeMethod_ = env->GetMethodID(runtimeClass_, "startRuntime", "()V");
+                requestFrameMethod_ = env->GetMethodID(runtimeClass_, "requestFrame", "(J)V");
+                closeRuntimeMethod_ = env->GetMethodID(runtimeClass_, "closeRuntime", "()V");
 
-        handleExternalDragEnteredMethod_ = env->GetMethodID(runtimeClass_, "handleExternalDragEntered", "(IIIIJ[Ljava/lang/String;Ljava/lang/String;[BLjava/lang/String;)Z");
-        handleExternalDragMovedMethod_ = env->GetMethodID(runtimeClass_, "handleExternalDragMoved", "(IIIIJ[Ljava/lang/String;Ljava/lang/String;[BLjava/lang/String;)Z");
-        handleExternalDragExitedMethod_ = env->GetMethodID(runtimeClass_, "handleExternalDragExited", "()V");
-        handleExternalDragEndedMethod_ = env->GetMethodID(runtimeClass_, "handleExternalDragEnded", "()V");
-        handleExternalDropMethod_ = env->GetMethodID(runtimeClass_, "handleExternalDrop", "(IIIIJ[Ljava/lang/String;Ljava/lang/String;[BLjava/lang/String;)Z");
+                handleExternalDragEnteredMethod_ = env->GetMethodID(runtimeClass_, "handleExternalDragEntered", "(IIIIJ[Ljava/lang/String;Ljava/lang/String;[BLjava/lang/String;)Z");
+                handleExternalDragMovedMethod_ = env->GetMethodID(runtimeClass_, "handleExternalDragMoved", "(IIIIJ[Ljava/lang/String;Ljava/lang/String;[BLjava/lang/String;)Z");
+                handleExternalDragExitedMethod_ = env->GetMethodID(runtimeClass_, "handleExternalDragExited", "()V");
+                handleExternalDragEndedMethod_ = env->GetMethodID(runtimeClass_, "handleExternalDragEnded", "()V");
+                handleExternalDropMethod_ = env->GetMethodID(runtimeClass_, "handleExternalDrop", "(IIIIJ[Ljava/lang/String;Ljava/lang/String;[BLjava/lang/String;)Z");
 
-        if (!initializeMethod_ || !enterCurrentRuntimeMethod_ || !exitCurrentRuntimeMethod_ || 
-            !constructorMethod_ || !isContentBoundMethod_ || !startRuntimeMethod_ || 
-            !requestFrameMethod_ || !closeRuntimeMethod_ ||
-            !handleExternalDragEnteredMethod_ || !handleExternalDragMovedMethod_ ||
-            !handleExternalDragExitedMethod_ || !handleExternalDragEndedMethod_ ||
-            !handleExternalDropMethod_) {
-            std::cerr << "Failed to resolve ComposeRuntime JNI methods." << std::endl;
-            return;
+                if (!initializeMethod_ || !enterCurrentRuntimeMethod_ || !exitCurrentRuntimeMethod_ ||
+                    !constructorMethod_ || !isContentBoundMethod_ || !startRuntimeMethod_ ||
+                    !requestFrameMethod_ || !closeRuntimeMethod_ ||
+                    !handleExternalDragEnteredMethod_ || !handleExternalDragMovedMethod_ ||
+                    !handleExternalDragExitedMethod_ || !handleExternalDragEndedMethod_ ||
+                    !handleExternalDropMethod_) {
+                    std::cerr << "Failed to resolve ComposeRuntime JNI methods." << std::endl;
+                    env->DeleteGlobalRef(runtimeClass_);
+                    runtimeClass_ = nullptr;
+                    return;
+                }
+            }
         }
 
         env->CallStaticVoidMethod(runtimeClass_, initializeMethod_);
@@ -100,7 +107,7 @@ bool HostJvm::PrepareRuntime(int64_t runtimeId, const std::string& mainClassName
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
 
-void HostJvm::RunRenderLoop(int64_t runtimeId, bool* isHostRunning) {
+void HostJvm::RunRenderLoop(int64_t runtimeId, std::atomic<bool>* isHostRunning) {
     auto state = GetRuntime(runtimeId);
     if (!state || !state->jvmRuntimeRef) return;
 
@@ -111,10 +118,10 @@ void HostJvm::RunRenderLoop(int64_t runtimeId, bool* isHostRunning) {
         QueryPerformanceFrequency(&qpf);
         double frequency = (double)qpf.QuadPart;
 
-        while (*isHostRunning && state->jvmRuntimeRef) {
+        while (isHostRunning->load() && state->jvmRuntimeRef) {
             DwmFlush(); // Block natively until the Desktop Window Manager VBlank
 
-            if (!*isHostRunning || !state->jvmRuntimeRef) {
+            if (!isHostRunning->load() || !state->jvmRuntimeRef) {
                 break;
             }
 

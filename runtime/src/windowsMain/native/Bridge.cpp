@@ -409,6 +409,15 @@ Java_letmutex_compose_nativehost_internal_WindowsComposeBridgeBindings_nativeHos
     jint width,
     jint height
 ) {
+    if (width <= 0 || height <= 0) {
+        return nullptr;
+    }
+    // Guard against integer overflow in `width * height`.
+    if ((UINT32)width > 0x7FFFFFFF || (UINT32)height > 0x7FFFFFFF ||
+        (UINT64)((UINT32)width) * ((UINT32)height) > 0x7FFFFFFF) {
+        return nullptr;
+    }
+
     HTHEME hTheme = OpenThemeData(NULL, L"WINDOW");
     if (!hTheme) return nullptr;
 
@@ -417,7 +426,22 @@ Java_letmutex_compose_nativehost_internal_WindowsComposeBridgeBindings_nativeHos
     HRESULT hrBP = BufferedPaintInit();
 
     HDC hdcScreen = GetDC(NULL);
+    if (!hdcScreen) {
+        CloseThemeData(hTheme);
+        if (SUCCEEDED(hrBP)) {
+            BufferedPaintUnInit();
+        }
+        return nullptr;
+    }
     HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    if (!hdcMem) {
+        ReleaseDC(NULL, hdcScreen);
+        CloseThemeData(hTheme);
+        if (SUCCEEDED(hrBP)) {
+            BufferedPaintUnInit();
+        }
+        return nullptr;
+    }
 
     BITMAPINFO bmi = {0};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -429,6 +453,18 @@ Java_letmutex_compose_nativehost_internal_WindowsComposeBridgeBindings_nativeHos
 
     void* pixels = nullptr;
     HBITMAP hBitmap = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &pixels, NULL, 0);
+    if (!hBitmap || !pixels) {
+        if (hBitmap) {
+            DeleteObject(hBitmap);
+        }
+        DeleteDC(hdcMem);
+        ReleaseDC(NULL, hdcScreen);
+        CloseThemeData(hTheme);
+        if (SUCCEEDED(hrBP)) {
+            BufferedPaintUnInit();
+        }
+        return nullptr;
+    }
     HBITMAP hOldBitmap = (HBITMAP)SelectObject(hdcMem, hBitmap);
 
     RECT rect = {0, 0, width, height};

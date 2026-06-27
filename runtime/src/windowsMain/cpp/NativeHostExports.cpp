@@ -226,10 +226,10 @@ EXPORT int32_t nativeHostIsWindowAttached(int64_t runtimeId) {
 }
 
 EXPORT int32_t nativeHostWaitForWindowAttached(int64_t runtimeId) {
-    // Wait until window attaches
+    // Wait until window attaches.
     while (true) {
         auto state = HostJvm::Get().GetRuntime(runtimeId);
-        if (!state || !state->isRunning) {
+        if (!state || !state->isRunning.load()) {
             return 0;
         }
         if (state->hwnd != nullptr) {
@@ -237,7 +237,6 @@ EXPORT int32_t nativeHostWaitForWindowAttached(int64_t runtimeId) {
         }
         Sleep(10);
     }
-    return 0;
 }
 
 EXPORT int32_t nativeHostPollFrameStateData(

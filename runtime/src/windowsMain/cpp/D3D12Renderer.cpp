@@ -130,8 +130,20 @@ void D3D12Renderer::Resize(int width, int height) {
 
     HRESULT hr = swapChain_->ResizeBuffers(FrameCount, width, height, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
     if (FAILED(hr)) {
-        std::cerr << "[D3D12] ResizeBuffers FAILED: 0x" << std::hex << hr << std::dec 
+        std::cerr << "[D3D12] ResizeBuffers FAILED: 0x" << std::hex << hr << std::dec
                   << " (requested size: " << width << "x" << height << ")" << std::endl;
+        // Re-acquire buffers at the previous (still-valid) size so the renderer
+        // keeps usable render targets instead of leaving them all null, which
+        // would cause AcquireDrawableTexturePtr to return 0 and trigger an
+        // infinite resize-retry loop in the caller.
+        D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
+        for (UINT n = 0; n < FrameCount; n++) {
+            if (SUCCEEDED(swapChain_->GetBuffer(n, IID_PPV_ARGS(&renderTargets_[n])))) {
+                device_->CreateRenderTargetView(renderTargets_[n].Get(), nullptr, rtvHandle);
+            }
+            rtvHandle.ptr += rtvDescriptorSize_;
+        }
+        frameIndex_ = swapChain_->GetCurrentBackBufferIndex();
         return;
     }
 

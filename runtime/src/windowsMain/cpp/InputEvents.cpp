@@ -28,9 +28,13 @@ void InputEventStore::EnqueueText(const TextEventRecord& record) {
     std::lock_guard<std::mutex> lock(lock_);
     InputEventRecord event;
     event.kind = INPUT_EVENT_KIND_TEXT;
-    event.text = record.text;
-    event.key.eventType = record.eventType; // Abuse union for eventType and timestamp
+    // Activate the `key` union member (it shares the eventType/timestampMillis
+    // layout we reuse for text events) before writing through it to avoid
+    // accessing a non-active union member.
+    event.key = KeyEventRecord{};
+    event.key.eventType = record.eventType;
     event.key.timestampMillis = record.timestampMillis;
+    event.text = record.text;
     queue_.push_back(event);
 }
 

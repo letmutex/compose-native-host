@@ -152,12 +152,17 @@ static AppCfg LoadAppCfg() {
 // DPI Helpers
 static float GetDpiScale(HWND hwnd) {
     typedef UINT(WINAPI *GetDpiForWindowType)(HWND);
-    HMODULE user32 = GetModuleHandleA("user32.dll");
-    if (user32) {
-        auto getDpi = (GetDpiForWindowType)GetProcAddress(user32, "GetDpiForWindow");
-        if (getDpi) {
-            return (float)getDpi(hwnd) / 96.0f;
+    // Resolve GetDpiForWindow once (thread-safe static init); it may be null on
+    // older Windows versions where the per-monitor-DPI API is unavailable.
+    static const auto getDpi = []() -> GetDpiForWindowType {
+        HMODULE user32 = GetModuleHandleA("user32.dll");
+        if (user32) {
+            return (GetDpiForWindowType)GetProcAddress(user32, "GetDpiForWindow");
         }
+        return nullptr;
+    }();
+    if (getDpi) {
+        return (float)getDpi(hwnd) / 96.0f;
     }
     HDC hdc = GetDC(hwnd);
     int dpiX = GetDeviceCaps(hdc, LOGPIXELSX);
@@ -397,14 +402,14 @@ static void StartSharedLibraryRenderLoop(int64_t runtimeId, std::string mainClas
         std::cerr << "Warning: dwmapi.dll not found. Falling back to Sleep(16)." << std::endl;
     }
 
-    while (s->isRunning && s->graalRuntimeHandle) {
+    while (s->isRunning.load() && s->graalRuntimeHandle) {
         if (dwmFlushFn) {
             dwmFlushFn();
         } else {
             Sleep(16);
         }
 
-        if (!s->isRunning || !s->graalRuntimeHandle) {
+        if (!s->isRunning.load() || !s->graalRuntimeHandle) {
             break;
         }
 
@@ -483,6 +488,15 @@ HCOMPOSERUNTIME ComposeRuntimeCreate(HWND hwnd, const ComposeRuntimeConfiguratio
     std::string mainClassName = config.kotlinMainClass;
     if (mainClassName.empty()) {
         std::cerr << "Fatal: ComposeRuntimeConfiguration.kotlinMainClass must not be empty." << std::endl;
+        // Clean up the resources we just acquired so nothing leaks.
+        if (state->dropTarget) {
+            RevokeDragDrop(state->hwnd);
+            state->dropTarget->Release();
+            state->dropTarget = nullptr;
+        }
+        state->renderer.Shutdown();
+        state->isRunning = false;
+        HostJvm::Get().UnregisterRuntime(runtimeId);
         return nullptr;
     }
     bool enableProfile = config.enableProfileRendering;
