@@ -200,7 +200,7 @@ func timestampMillis(for event: NSEvent) -> Int64 {
 }
 
 func currentTimestampMillis() -> Int64 {
-    Int64((ProcessInfo.processInfo.systemUptime * 1_000.0).rounded())
+    Int64(MachUptimeClock.nowNanos() / 1_000_000)
 }
 
 func codePoint(for event: NSEvent) -> Int32 {
