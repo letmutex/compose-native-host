@@ -543,6 +543,7 @@ public final class ComposeHostEngine {
         let backend = self.backend
         lock.unlock()
         guard let backend else {
+            runtimeState.resetRuntimePreparation()
             return
         }
         DispatchQueue.global(qos: .userInitiated).async {
