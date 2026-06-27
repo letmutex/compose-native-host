@@ -560,14 +560,41 @@ final class ComposeJvmHost {
             exceptionClear: exceptionClear,
             deleteLocalRef: deleteLocalRef,
             className: mainClassName
-        ),
-        let stringClass = findClass(envRaw, "java/lang/String"),
-        let mainMethod = getStaticMethodID(envRaw, mainClassResolution.classRef, "main", "([Ljava/lang/String;)V") else {
+        ) else {
             lifecycleListener.mainInvocationFailed(
                 mainClassName: mainClassName
             )
             return false
         }
+        defer {
+            deleteLocalRef(envRaw, mainClassResolution.classRef)
+        }
+
+        guard let stringClass = findClass(envRaw, "java/lang/String") else {
+            lifecycleListener.mainInvocationFailed(
+                mainClassName: mainClassName
+            )
+            return false
+        }
+        defer {
+            deleteLocalRef(envRaw, stringClass)
+        }
+
+        guard let mainMethod = getStaticMethodID(envRaw, mainClassResolution.classRef, "main", "([Ljava/lang/String;)V") else {
+            lifecycleListener.mainInvocationFailed(
+                mainClassName: mainClassName
+            )
+            return false
+        }
+
+        guard let emptyArgs = newObjectArray(envRaw, 0, stringClass, nil) else {
+            lifecycleListener.mainInvocationFailed(mainClassName: mainClassName)
+            return false
+        }
+        defer {
+            deleteLocalRef(envRaw, emptyArgs)
+        }
+
         var currentRuntimeArgs = jvalue(l: runtimeRef)
         callStaticVoidMethodA(
             envRaw,
@@ -575,18 +602,10 @@ final class ComposeJvmHost {
             runtimeHandles.enterCurrentRuntimeMethod,
             &currentRuntimeArgs
         )
-        let emptyArgs = newObjectArray(envRaw, 0, stringClass, nil)
         defer {
-            deleteLocalRef(envRaw, mainClassResolution.classRef)
-            deleteLocalRef(envRaw, stringClass)
-            if let emptyArgs {
-                deleteLocalRef(envRaw, emptyArgs)
-            }
+            callStaticVoidMethodA(envRaw, runtimeHandles.runtimeClass, runtimeHandles.exitCurrentRuntimeMethod, nil)
         }
-        guard let emptyArgs else {
-            lifecycleListener.mainInvocationFailed(mainClassName: mainClassName)
-            return false
-        }
+
         var mainArgs = jvalue(l: emptyArgs)
         callStaticVoidMethodA(
             envRaw,
@@ -594,7 +613,6 @@ final class ComposeJvmHost {
             mainMethod,
             &mainArgs
         )
-        callStaticVoidMethodA(envRaw, runtimeHandles.runtimeClass, runtimeHandles.exitCurrentRuntimeMethod, nil)
         let isContentBound = callBooleanMethodA(
             envRaw,
             runtimeRef,

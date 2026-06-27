@@ -164,6 +164,14 @@ final class RuntimePreparationState {
         return prepared
     }
 
+    func waitForPreparationToFinish() {
+        condition.lock()
+        while isPreparing {
+            condition.wait()
+        }
+        condition.unlock()
+    }
+
     func isPreparedRuntime() -> Bool {
         condition.lock()
         let prepared = isPrepared && !isTearingDown && !isReleased
@@ -405,6 +413,10 @@ final class ComposeHostRuntimeState {
         preparation.waitForPreparedRuntime()
     }
 
+    func waitForPreparationToFinish() {
+        preparation.waitForPreparationToFinish()
+    }
+
     func isRuntimePrepared() -> Bool {
         preparation.isPreparedRuntime()
     }
@@ -547,7 +559,7 @@ public final class ComposeHostEngine {
             return
         }
         DispatchQueue.global(qos: .userInitiated).async {
-            _ = runtimeState.waitForPreparedRuntime()
+            runtimeState.waitForPreparationToFinish()
             backend.releaseRuntime(runtimeState)
         }
     }

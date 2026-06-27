@@ -381,12 +381,12 @@ final class ComposePlatformView: NSView, NSTextInputClient {
         ) {
             return 1
         }
+        if let text = pasteboard.string(forType: .string), !text.isEmpty {
+            return 2
+        }
         if pasteboard.canReadObject(forClasses: [NSImage.self], options: nil) ||
             pasteboard.availableType(from: [.tiff]) != nil {
             return 3
-        }
-        if pasteboard.availableType(from: [.string]) != nil {
-            return 2
         }
         return nil
     }
