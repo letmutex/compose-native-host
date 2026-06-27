@@ -159,12 +159,8 @@ final class ComposeHostCoordinator: NSObject {
     }
 
     func notifyFirstFramePresented() {
-        if Thread.isMainThread {
-            emitEvent(.phaseChanged(.firstFramePresented))
-        } else {
-            DispatchQueue.main.sync {
-                self.emitEvent(.phaseChanged(.firstFramePresented))
-            }
+        dispatchToMain {
+            self.emitEvent(.phaseChanged(.firstFramePresented))
         }
     }
 
