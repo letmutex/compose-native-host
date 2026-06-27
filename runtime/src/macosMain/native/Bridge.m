@@ -194,7 +194,9 @@ Java_letmutex_compose_nativehost_internal_MacOsComposeBridgeBindings_nativeHostE
     if (payloadChars != NULL) {
         (*env)->ReleaseStringUTFChars(env, payload, payloadChars);
     }
-    (*env)->ReleaseStringUTFChars(env, name, nameChars);
+    if (nameChars != NULL) {
+        (*env)->ReleaseStringUTFChars(env, name, nameChars);
+    }
 }
 
 JNIEXPORT void JNICALL
@@ -208,8 +210,10 @@ Java_letmutex_compose_nativehost_internal_MacOsComposeBridgeBindings_nativeHostL
     }
 
     const char *nameChars = (*env)->GetStringUTFChars(env, name, NULL);
-    nativeHostLogPhaseTiming(nameChars);
-    (*env)->ReleaseStringUTFChars(env, name, nameChars);
+    if (nameChars != NULL) {
+        nativeHostLogPhaseTiming(nameChars);
+        (*env)->ReleaseStringUTFChars(env, name, nameChars);
+    }
 }
 
 JNIEXPORT void JNICALL
