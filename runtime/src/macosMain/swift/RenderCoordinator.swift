@@ -14,12 +14,15 @@ final class RenderCoordinator: NSObject {
     private var legacyDisplayTimer: Timer?
 
     var hasDisplaySyncDriver: Bool {
-        appKitDisplayLink != nil || legacyDisplayTimer != nil
+        renderSignalLock.lock()
+        defer { renderSignalLock.unlock() }
+        return appKitDisplayLink != nil || legacyDisplayTimer != nil
     }
 
     func requestRenderTick() {
         renderSignalLock.lock()
-        if hasDisplaySyncDriver {
+        let hasDriver = appKitDisplayLink != nil || legacyDisplayTimer != nil
+        if hasDriver {
             renderTickRequested = true
             renderSignalLock.unlock()
             return
@@ -66,17 +69,26 @@ final class RenderCoordinator: NSObject {
             }
             displayLink.add(to: .main, forMode: .common)
             displayLink.isPaused = false
+            renderSignalLock.lock()
             appKitDisplayLink = displayLink
+            renderSignalLock.unlock()
         } else {
             setupLegacyDisplayTimer(screen: screen)
         }
     }
 
     func stopDisplayLink() {
+        let displayLinkToInvalidate: CADisplayLink?
+        let timerToInvalidate: Timer?
         if #available(macOS 14.0, *) {
-            appKitDisplayLink?.invalidate()
+            renderSignalLock.lock()
+            displayLinkToInvalidate = appKitDisplayLink
             appKitDisplayLink = nil
+            renderSignalLock.unlock()
+        } else {
+            displayLinkToInvalidate = nil
         }
+        displayLinkToInvalidate?.invalidate()
         stopLegacyDisplayTimer()
     }
 
@@ -106,12 +118,17 @@ final class RenderCoordinator: NSObject {
         }
         timer.tolerance = 1.0 / Double(framesPerSecond) * 0.15
         RunLoop.main.add(timer, forMode: .common)
+        renderSignalLock.lock()
         legacyDisplayTimer = timer
+        renderSignalLock.unlock()
     }
 
     private func stopLegacyDisplayTimer() {
-        legacyDisplayTimer?.invalidate()
+        renderSignalLock.lock()
+        let timerToInvalidate = legacyDisplayTimer
         legacyDisplayTimer = nil
+        renderSignalLock.unlock()
+        timerToInvalidate?.invalidate()
     }
 
     private func handleLegacyTimerTick() {
