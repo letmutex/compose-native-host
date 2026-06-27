@@ -158,7 +158,7 @@ final class RuntimePreparationState {
 
     func waitForPreparedRuntime() -> Bool {
         condition.lock()
-        while isPreparing || isTearingDown {
+        while (isPreparing || isTearingDown) && !isReleased {
             condition.wait()
         }
         let prepared = isPrepared && !isReleased
@@ -195,10 +195,6 @@ final class RuntimePreparationState {
 
     func reset() {
         condition.lock()
-        guard !isReleased else {
-            condition.unlock()
-            return
-        }
         isPreparing = false
         isPrepared = false
         isTearingDown = false

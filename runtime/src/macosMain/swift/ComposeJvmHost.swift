@@ -834,6 +834,7 @@ final class ComposeJvmHost {
         runtimeHandles: ComposeRuntimeHandles? = nil
     ) {
         guard let runtimeRef = runtimeState.clearJvmRuntimeRef() else {
+            runtimeState.resetRuntimePreparation()
             return
         }
 
