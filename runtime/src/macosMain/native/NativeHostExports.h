@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 int64_t nativeHostGetWindowInfo(int64_t runtimeId);
+int32_t nativeHostInputEventRecordStride(void);
 int64_t nativeHostMetalDevicePtr(int64_t runtimeId);
 int64_t nativeHostMetalQueuePtr(int64_t runtimeId);
 int64_t nativeHostAcquireDrawableTexturePtr(int64_t runtimeId);

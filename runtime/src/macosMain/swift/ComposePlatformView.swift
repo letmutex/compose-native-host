@@ -305,32 +305,45 @@ final class ComposePlatformView: NSView, NSTextInputClient {
                 options: [.urlReadingFileURLsOnly: true]
             ) as? [URL]) ?? []
         let files = fileUrls.map(javaLikeFileUriString)
+        if !files.isEmpty {
+            return CachedExternalDropPayload(
+                payloadKind: 1,
+                files: files,
+                text: nil,
+                imageBytes: nil,
+                imageFormat: nil
+            )
+        }
         let text = pasteboard.string(forType: .string)
-        let imageBytes = encodedDroppedImage(from: pasteboard)
-        guard let payloadKind = externalDropPayloadKind(
-            files: files,
-            text: text,
-            imageBytes: imageBytes
-        ) else {
+        if let text, !text.isEmpty {
+            return CachedExternalDropPayload(
+                payloadKind: 2,
+                files: [],
+                text: text,
+                imageBytes: nil,
+                imageFormat: nil
+            )
+        }
+        guard let imageBytes = encodedDroppedImage(from: pasteboard) else {
             return nil
         }
         return CachedExternalDropPayload(
-            payloadKind: payloadKind,
-            files: files,
-            text: text,
+            payloadKind: 3,
+            files: [],
+            text: nil,
             imageBytes: imageBytes,
-            imageFormat: imageBytes == nil ? nil : "image/png"
+            imageFormat: "image/png"
         )
     }
 
     private func encodedDroppedImage(from pasteboard: NSPasteboard) -> Data? {
-        if let image = (pasteboard.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage])?.first,
-           let tiffData = image.tiffRepresentation,
+        if let tiffData = pasteboard.data(forType: .tiff),
            let bitmap = NSBitmapImageRep(data: tiffData),
            let pngData = bitmap.representation(using: .png, properties: [:]) {
             return pngData
         }
-        if let tiffData = pasteboard.data(forType: .tiff),
+        if let image = (pasteboard.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage])?.first,
+           let tiffData = image.tiffRepresentation,
            let bitmap = NSBitmapImageRep(data: tiffData),
            let pngData = bitmap.representation(using: .png, properties: [:]) {
             return pngData
@@ -368,29 +381,12 @@ final class ComposePlatformView: NSView, NSTextInputClient {
         ) {
             return 1
         }
+        if let text = pasteboard.string(forType: .string), !text.isEmpty {
+            return 2
+        }
         if pasteboard.canReadObject(forClasses: [NSImage.self], options: nil) ||
             pasteboard.availableType(from: [.tiff]) != nil {
             return 3
-        }
-        if pasteboard.availableType(from: [.string]) != nil {
-            return 2
-        }
-        return nil
-    }
-
-    private func externalDropPayloadKind(
-        files: [String],
-        text: String?,
-        imageBytes: Data?
-    ) -> Int32? {
-        if !files.isEmpty {
-            return 1
-        }
-        if imageBytes != nil {
-            return 3
-        }
-        if text != nil {
-            return 2
         }
         return nil
     }

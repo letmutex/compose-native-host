@@ -184,9 +184,17 @@ Java_letmutex_compose_nativehost_internal_MacOsComposeBridgeBindings_nativeHostE
     }
 
     const char *nameChars = (*env)->GetStringUTFChars(env, name, NULL);
+    if (nameChars == NULL) {
+        return;
+    }
+
     const char *payloadChars = NULL;
     if (payload != NULL) {
         payloadChars = (*env)->GetStringUTFChars(env, payload, NULL);
+        if (payloadChars == NULL) {
+            (*env)->ReleaseStringUTFChars(env, name, nameChars);
+            return;
+        }
     }
 
     nativeHostEmitAppEvent((int64_t)runtimeId, nameChars, payloadChars);
@@ -208,8 +216,10 @@ Java_letmutex_compose_nativehost_internal_MacOsComposeBridgeBindings_nativeHostL
     }
 
     const char *nameChars = (*env)->GetStringUTFChars(env, name, NULL);
-    nativeHostLogPhaseTiming(nameChars);
-    (*env)->ReleaseStringUTFChars(env, name, nameChars);
+    if (nameChars != NULL) {
+        nativeHostLogPhaseTiming(nameChars);
+        (*env)->ReleaseStringUTFChars(env, name, nameChars);
+    }
 }
 
 JNIEXPORT void JNICALL
@@ -299,7 +309,7 @@ Java_letmutex_compose_nativehost_internal_MacOsComposeBridgeBindings_nativeHostP
     }
 
     const NativeFrameStateJniCache *cache = &nativeFrameStateJniCache;
-    const jint recordStride = 10;
+    const jint recordStride = nativeHostInputEventRecordStride();
     jsize capacity = maxCount;
     jlongArray recordsArray = (jlongArray)(*env)->GetObjectField(env, frameState, cache->recordsField);
     jobjectArray texts = (jobjectArray)(*env)->GetObjectField(env, frameState, cache->textsField);
@@ -336,8 +346,8 @@ Java_letmutex_compose_nativehost_internal_MacOsComposeBridgeBindings_nativeHostP
     }
 
     jint previousCount = (*env)->GetIntField(env, frameState, cache->eventCountField);
-    jint clearCount = previousCount > count ? previousCount : count;
-    for (jint index = 0; index < clearCount; index++) {
+    jint clearStart = count < previousCount ? count : previousCount;
+    for (jint index = clearStart; index < previousCount; index++) {
         (*env)->SetObjectArrayElement(env, texts, index, NULL);
     }
 
@@ -348,7 +358,11 @@ Java_letmutex_compose_nativehost_internal_MacOsComposeBridgeBindings_nativeHostP
             if (javaText != NULL) {
                 (*env)->SetObjectArrayElement(env, texts, index, javaText);
                 (*env)->DeleteLocalRef(env, javaText);
+            } else if (index < previousCount) {
+                (*env)->SetObjectArrayElement(env, texts, index, NULL);
             }
+        } else if (index < previousCount) {
+            (*env)->SetObjectArrayElement(env, texts, index, NULL);
         }
     }
     free(textChars);

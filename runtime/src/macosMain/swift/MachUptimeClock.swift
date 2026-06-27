@@ -13,6 +13,9 @@ enum MachUptimeClock {
         if info.numer == info.denom {
             return absolute
         }
-        return absolute &* UInt64(info.numer) / UInt64(info.denom)
+        let (product, overflow) = UInt64(info.numer).multipliedReportingOverflow(by: absolute)
+        let nanos = product / UInt64(info.denom)
+        assert(!overflow, "mach_absolute_time * timebaseInfo.numer overflowed UInt64")
+        return nanos
     }
 }

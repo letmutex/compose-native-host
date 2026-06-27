@@ -38,6 +38,11 @@ public func nativeHostGetWindowInfo(_ runtimeId: Int64) -> Int64 {
     return Int64(bitPattern: packed)
 }
 
+@_cdecl("nativeHostInputEventRecordStride")
+public func nativeHostInputEventRecordStride() -> Int32 {
+    Int32(inputEventRecordStride)
+}
+
 @_cdecl("nativeHostMetalDevicePtr")
 public func nativeHostMetalDevicePtr(_ runtimeId: Int64) -> Int64 {
     runtimeState(for: runtimeId)?.currentRenderHandle()?.metalDevicePtr() ?? 0

@@ -380,9 +380,15 @@ final class ComposeJvmHost {
         jvmRaw: UnsafeMutableRawPointer,
         block: (UnsafeMutableRawPointer) -> Void
     ) {
+        let getEnvIndex = 6
         let attachCurrentThreadIndex = 4
         let detachCurrentThreadIndex = 5
 
+        typealias GetEnv = @convention(c) (
+            UnsafeMutableRawPointer,
+            UnsafeMutablePointer<UnsafeMutableRawPointer?>?,
+            jint
+        ) -> jint
         typealias AttachCurrentThread = @convention(c) (
             UnsafeMutableRawPointer,
             UnsafeMutablePointer<UnsafeMutableRawPointer?>?,
@@ -391,16 +397,27 @@ final class ComposeJvmHost {
         typealias DetachCurrentThread = @convention(c) (UnsafeMutableRawPointer) -> jint
 
         let invokePtr = jvmRaw.assumingMemoryBound(to: UnsafePointer<UnsafeRawPointer?>.self).pointee
+        let getEnv = unsafeBitCast(invokePtr[getEnvIndex], to: GetEnv.self)
         let attach = unsafeBitCast(invokePtr[attachCurrentThreadIndex], to: AttachCurrentThread.self)
         let detach = unsafeBitCast(invokePtr[detachCurrentThreadIndex], to: DetachCurrentThread.self)
 
         var envRaw: UnsafeMutableRawPointer?
-        let attachResult = attach(jvmRaw, &envRaw, nil)
-        if attachResult != 0 || envRaw == nil {
-            fputs("AttachCurrentThread failed: \(attachResult)\n", stderr)
-            return
+        var didAttach = false
+        let getEnvResult = getEnv(jvmRaw, &envRaw, jint(0x00010008))
+        if getEnvResult != 0 || envRaw == nil {
+            envRaw = nil
+            let attachResult = attach(jvmRaw, &envRaw, nil)
+            if attachResult != 0 || envRaw == nil {
+                fputs("AttachCurrentThread failed: \(attachResult)\n", stderr)
+                return
+            }
+            didAttach = true
         }
-        defer { _ = detach(jvmRaw) }
+        defer {
+            if didAttach {
+                _ = detach(jvmRaw)
+            }
+        }
 
         block(envRaw!)
     }
@@ -543,14 +560,41 @@ final class ComposeJvmHost {
             exceptionClear: exceptionClear,
             deleteLocalRef: deleteLocalRef,
             className: mainClassName
-        ),
-        let stringClass = findClass(envRaw, "java/lang/String"),
-        let mainMethod = getStaticMethodID(envRaw, mainClassResolution.classRef, "main", "([Ljava/lang/String;)V") else {
+        ) else {
             lifecycleListener.mainInvocationFailed(
                 mainClassName: mainClassName
             )
             return false
         }
+        defer {
+            deleteLocalRef(envRaw, mainClassResolution.classRef)
+        }
+
+        guard let stringClass = findClass(envRaw, "java/lang/String") else {
+            lifecycleListener.mainInvocationFailed(
+                mainClassName: mainClassName
+            )
+            return false
+        }
+        defer {
+            deleteLocalRef(envRaw, stringClass)
+        }
+
+        guard let mainMethod = getStaticMethodID(envRaw, mainClassResolution.classRef, "main", "([Ljava/lang/String;)V") else {
+            lifecycleListener.mainInvocationFailed(
+                mainClassName: mainClassName
+            )
+            return false
+        }
+
+        guard let emptyArgs = newObjectArray(envRaw, 0, stringClass, nil) else {
+            lifecycleListener.mainInvocationFailed(mainClassName: mainClassName)
+            return false
+        }
+        defer {
+            deleteLocalRef(envRaw, emptyArgs)
+        }
+
         var currentRuntimeArgs = jvalue(l: runtimeRef)
         callStaticVoidMethodA(
             envRaw,
@@ -558,7 +602,10 @@ final class ComposeJvmHost {
             runtimeHandles.enterCurrentRuntimeMethod,
             &currentRuntimeArgs
         )
-        let emptyArgs = newObjectArray(envRaw, 0, stringClass, nil)
+        defer {
+            callStaticVoidMethodA(envRaw, runtimeHandles.runtimeClass, runtimeHandles.exitCurrentRuntimeMethod, nil)
+        }
+
         var mainArgs = jvalue(l: emptyArgs)
         callStaticVoidMethodA(
             envRaw,
@@ -566,7 +613,6 @@ final class ComposeJvmHost {
             mainMethod,
             &mainArgs
         )
-        callStaticVoidMethodA(envRaw, runtimeHandles.runtimeClass, runtimeHandles.exitCurrentRuntimeMethod, nil)
         let isContentBound = callBooleanMethodA(
             envRaw,
             runtimeRef,
@@ -834,6 +880,7 @@ final class ComposeJvmHost {
         runtimeHandles: ComposeRuntimeHandles? = nil
     ) {
         guard let runtimeRef = runtimeState.clearJvmRuntimeRef() else {
+            runtimeState.resetRuntimePreparation()
             return
         }
 
@@ -878,6 +925,7 @@ final class ComposeJvmHost {
             callObjectMethodA: callObjectMethodA,
             callStaticObjectMethodA: callStaticObjectMethodA,
             newStringUTF: newStringUTF,
+            deleteLocalRef: deleteLocalRef,
             className: className
         ) else {
             return nil

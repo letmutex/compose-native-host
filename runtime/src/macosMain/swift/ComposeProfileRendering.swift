@@ -170,7 +170,7 @@ private extension ComposeProfileRenderingNSView {
         bars.append(longestFrame(in: pendingWindowSamples))
         pendingWindowSamples.removeAll(keepingCapacity: true)
 
-        let maxBars = max(600, 120)
+        let maxBars = 600
         if bars.count > maxBars {
             bars.removeFirst(bars.count - maxBars)
         }

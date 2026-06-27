@@ -21,14 +21,14 @@ func setHostLoggingEnabled(_ enabled: Bool) {
 }
 
 public func logPhaseTiming(_ name: String) {
-    let line = formattedHostLogLine(name)
-
     hostLoggingLock.lock()
-    defer { hostLoggingLock.unlock() }
+    let enabled = hostLoggingEnabled
+    hostLoggingLock.unlock()
 
-    if hostLoggingEnabled {
-        print(line)
+    guard enabled else {
+        return
     }
+    print(formattedHostLogLine(name))
 }
 
 private func formattedHostLogLine(_ name: String) -> String {

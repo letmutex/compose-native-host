@@ -175,28 +175,44 @@ func loadSystemClass(
     callObjectMethodA: JniCallObjectMethodA,
     callStaticObjectMethodA: JniCallStaticObjectMethodA,
     newStringUTF: JniNewStringUTF,
+    deleteLocalRef: JniDeleteLocalRef,
     className: String
 ) -> UnsafeMutableRawPointer? {
-    guard let classLoaderClass = findClass(envRaw, "java/lang/ClassLoader"),
-          let getSystemClassLoader = getStaticMethodID(
-            envRaw,
-            classLoaderClass,
-            "getSystemClassLoader",
-            "()Ljava/lang/ClassLoader;"
-          ) else {
+    guard let classLoaderClass = findClass(envRaw, "java/lang/ClassLoader") else {
+        return nil
+    }
+    defer {
+        deleteLocalRef(envRaw, classLoaderClass)
+    }
+
+    guard let getSystemClassLoader = getStaticMethodID(
+        envRaw,
+        classLoaderClass,
+        "getSystemClassLoader",
+        "()Ljava/lang/ClassLoader;"
+    ) else {
         return nil
     }
 
     let classLoader = callStaticObjectMethodA(envRaw, classLoaderClass, getSystemClassLoader, nil)
-    guard let classLoader,
-          let loadClass = getMethodID(
-            envRaw,
-            classLoaderClass,
-            "loadClass",
-            "(Ljava/lang/String;)Ljava/lang/Class;"
-          ),
-          let jClassName = newStringUTF(envRaw, className) else {
+    guard let classLoader else {
         return nil
+    }
+    defer {
+        deleteLocalRef(envRaw, classLoader)
+    }
+
+    guard let loadClass = getMethodID(
+        envRaw,
+        classLoaderClass,
+        "loadClass",
+        "(Ljava/lang/String;)Ljava/lang/Class;"
+    ),
+    let jClassName = newStringUTF(envRaw, className) else {
+        return nil
+    }
+    defer {
+        deleteLocalRef(envRaw, jClassName)
     }
 
     let loadArgs = [jvalue(l: jClassName)]

@@ -84,9 +84,7 @@ final class HostRunState {
 
     func setRunning(_ running: Bool) {
         condition.lock()
-        if running {
-            hasStarted = true
-        }
+        hasStarted = true
         isRunning = running
         condition.broadcast()
         condition.unlock()
@@ -158,12 +156,20 @@ final class RuntimePreparationState {
 
     func waitForPreparedRuntime() -> Bool {
         condition.lock()
-        while isPreparing || isTearingDown {
+        while (isPreparing || isTearingDown) && !isReleased {
             condition.wait()
         }
         let prepared = isPrepared && !isReleased
         condition.unlock()
         return prepared
+    }
+
+    func waitForPreparationToFinish() {
+        condition.lock()
+        while isPreparing {
+            condition.wait()
+        }
+        condition.unlock()
     }
 
     func isPreparedRuntime() -> Bool {
@@ -195,10 +201,6 @@ final class RuntimePreparationState {
 
     func reset() {
         condition.lock()
-        guard !isReleased else {
-            condition.unlock()
-            return
-        }
         isPreparing = false
         isPrepared = false
         isTearingDown = false
@@ -278,8 +280,19 @@ final class ComposeHostRuntimeState {
     let metrics = WindowMetricsStore()
     let attachment = WindowAttachmentState()
     private let preparation = RuntimePreparationState()
-    lazy var inputEvents = InputEventStore { [weak self] in
-        self?.requestRenderTick()
+    private let inputEventsLock = NSLock()
+    private var inputEventsStore: InputEventStore?
+    var inputEvents: InputEventStore {
+        inputEventsLock.lock()
+        defer { inputEventsLock.unlock() }
+        if let inputEventsStore {
+            return inputEventsStore
+        }
+        let store = InputEventStore { [weak self] in
+            self?.requestRenderTick()
+        }
+        inputEventsStore = store
+        return store
     }
 
     private let lock = NSLock()
@@ -398,6 +411,10 @@ final class ComposeHostRuntimeState {
 
     func waitForPreparedRuntime() -> Bool {
         preparation.waitForPreparedRuntime()
+    }
+
+    func waitForPreparationToFinish() {
+        preparation.waitForPreparationToFinish()
     }
 
     func isRuntimePrepared() -> Bool {
@@ -538,10 +555,11 @@ public final class ComposeHostEngine {
         let backend = self.backend
         lock.unlock()
         guard let backend else {
+            runtimeState.resetRuntimePreparation()
             return
         }
         DispatchQueue.global(qos: .userInitiated).async {
-            _ = runtimeState.waitForPreparedRuntime()
+            runtimeState.waitForPreparationToFinish()
             backend.releaseRuntime(runtimeState)
         }
     }
