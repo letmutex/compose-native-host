@@ -305,21 +305,34 @@ final class ComposePlatformView: NSView, NSTextInputClient {
                 options: [.urlReadingFileURLsOnly: true]
             ) as? [URL]) ?? []
         let files = fileUrls.map(javaLikeFileUriString)
+        if !files.isEmpty {
+            return CachedExternalDropPayload(
+                payloadKind: 1,
+                files: files,
+                text: nil,
+                imageBytes: nil,
+                imageFormat: nil
+            )
+        }
         let text = pasteboard.string(forType: .string)
-        let imageBytes = encodedDroppedImage(from: pasteboard)
-        guard let payloadKind = externalDropPayloadKind(
-            files: files,
-            text: text,
-            imageBytes: imageBytes
-        ) else {
+        if let text, !text.isEmpty {
+            return CachedExternalDropPayload(
+                payloadKind: 2,
+                files: [],
+                text: text,
+                imageBytes: nil,
+                imageFormat: nil
+            )
+        }
+        guard let imageBytes = encodedDroppedImage(from: pasteboard) else {
             return nil
         }
         return CachedExternalDropPayload(
-            payloadKind: payloadKind,
-            files: files,
-            text: text,
+            payloadKind: 3,
+            files: [],
+            text: nil,
             imageBytes: imageBytes,
-            imageFormat: imageBytes == nil ? nil : "image/png"
+            imageFormat: "image/png"
         )
     }
 
@@ -373,23 +386,6 @@ final class ComposePlatformView: NSView, NSTextInputClient {
             return 3
         }
         if pasteboard.availableType(from: [.string]) != nil {
-            return 2
-        }
-        return nil
-    }
-
-    private func externalDropPayloadKind(
-        files: [String],
-        text: String?,
-        imageBytes: Data?
-    ) -> Int32? {
-        if !files.isEmpty {
-            return 1
-        }
-        if imageBytes != nil {
-            return 3
-        }
-        if text != nil {
             return 2
         }
         return nil
