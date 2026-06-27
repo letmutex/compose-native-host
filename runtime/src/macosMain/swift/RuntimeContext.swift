@@ -84,9 +84,7 @@ final class HostRunState {
 
     func setRunning(_ running: Bool) {
         condition.lock()
-        if running {
-            hasStarted = true
-        }
+        hasStarted = true
         isRunning = running
         condition.broadcast()
         condition.unlock()
