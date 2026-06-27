@@ -40,7 +40,7 @@ public func nativeHostGetWindowInfo(_ runtimeId: Int64) -> Int64 {
 
 @_cdecl("nativeHostInputEventRecordStride")
 public func nativeHostInputEventRecordStride() -> Int32 {
-    inputEventRecordStride
+    Int32(inputEventRecordStride)
 }
 
 @_cdecl("nativeHostMetalDevicePtr")
