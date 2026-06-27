@@ -340,8 +340,8 @@ Java_letmutex_compose_nativehost_internal_MacOsComposeBridgeBindings_nativeHostP
     }
 
     jint previousCount = (*env)->GetIntField(env, frameState, cache->eventCountField);
-    jint clearCount = previousCount > count ? previousCount : count;
-    for (jint index = 0; index < clearCount; index++) {
+    jint clearStart = count < previousCount ? count : previousCount;
+    for (jint index = clearStart; index < previousCount; index++) {
         (*env)->SetObjectArrayElement(env, texts, index, NULL);
     }
 
@@ -352,7 +352,11 @@ Java_letmutex_compose_nativehost_internal_MacOsComposeBridgeBindings_nativeHostP
             if (javaText != NULL) {
                 (*env)->SetObjectArrayElement(env, texts, index, javaText);
                 (*env)->DeleteLocalRef(env, javaText);
+            } else if (index < previousCount) {
+                (*env)->SetObjectArrayElement(env, texts, index, NULL);
             }
+        } else if (index < previousCount) {
+            (*env)->SetObjectArrayElement(env, texts, index, NULL);
         }
     }
     free(textChars);
