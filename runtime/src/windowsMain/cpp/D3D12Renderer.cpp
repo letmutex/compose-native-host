@@ -118,9 +118,9 @@ bool D3D12Renderer::Initialize(HWND hwnd, int width, int height) {
     return true;
 }
 
-void D3D12Renderer::Resize(int width, int height) {
-    if (!swapChain_) return;
-    if (width_ == width && height_ == height) return;
+bool D3D12Renderer::Resize(int width, int height) {
+    if (!swapChain_) return false;
+    if (width_ == width && height_ == height) return true;
 
     WaitForGpu();
 
@@ -144,7 +144,12 @@ void D3D12Renderer::Resize(int width, int height) {
             rtvHandle.ptr += rtvDescriptorSize_;
         }
         frameIndex_ = swapChain_->GetCurrentBackBufferIndex();
-        return;
+        
+        // Return false to signal the failure. The caller will retry on the next frame.
+        // If we didn't communicate this failure, the host would incorrectly clear its
+        // resizePending flag and remain permanently stuck at the old SwapChain resolution,
+        // causing Windows DWM to severely stretch the rendered frame across the new window size.
+        return false;
     }
 
     frameIndex_ = swapChain_->GetCurrentBackBufferIndex();
@@ -152,7 +157,7 @@ void D3D12Renderer::Resize(int width, int height) {
     D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
     for (UINT n = 0; n < FrameCount; n++) {
         if (FAILED(swapChain_->GetBuffer(n, IID_PPV_ARGS(&renderTargets_[n])))) {
-            return;
+            return false;
         }
         device_->CreateRenderTargetView(renderTargets_[n].Get(), nullptr, rtvHandle);
         rtvHandle.ptr += rtvDescriptorSize_;
@@ -160,6 +165,7 @@ void D3D12Renderer::Resize(int width, int height) {
 
     width_ = width;
     height_ = height;
+    return true;
 }
 
 void D3D12Renderer::Shutdown() {

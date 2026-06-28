@@ -51,7 +51,16 @@ EXPORT int64_t nativeHostAcquireDrawableTexturePtr(int64_t runtimeId) {
         }
     }
     if (doResize && resizeWidth > 0 && resizeHeight > 0) {
-        state->renderer.Resize(resizeWidth, resizeHeight);
+        if (!state->renderer.Resize(resizeWidth, resizeHeight)) {
+            // If ResizeBuffers fails (e.g. Skia hasn't released the old backbuffer yet),
+            // restore the resizePending flag so the host retries resizing on the next frame.
+            // We also explicitly wake up the render loop immediately to guarantee progress,
+            // preventing the window from remaining indefinitely stretched by DWM.
+            std::lock_guard<std::mutex> lock(state->lock);
+            state->resizePending = true;
+            state->requestRenderTick = true;
+            state->cv.notify_one();
+        }
     }
     int64_t ptr = state->renderer.AcquireDrawableTexturePtr();
     if (ptr == 0 && doResize) {
