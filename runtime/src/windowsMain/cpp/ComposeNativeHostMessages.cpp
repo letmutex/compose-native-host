@@ -4,6 +4,14 @@
 
 #define WM_COMPOSE_UPDATE_IME (WM_APP + 100)
 
+static void RequestRenderTick(const std::shared_ptr<RuntimeState>& state) {
+    {
+        std::lock_guard<std::mutex> lock(state->lock);
+        state->requestRenderTick = true;
+    }
+    state->cv.notify_one();
+}
+
 static int32_t GetModifiers() {
     int32_t modifiers = 0;
     if (GetKeyState(VK_CONTROL) < 0) modifiers |= keyboardModifierCtrl;
@@ -42,19 +50,14 @@ static bool HandleSize(const std::shared_ptr<RuntimeState>& state, WPARAM wParam
             state->pendingWidth = width;
             state->pendingHeight = height;
             state->resizePending = true;
-            state->requestRenderTick = true;
         }
-        state->cv.notify_one();
+        RequestRenderTick(state);
     }
     return true;
 }
 
 static bool HandlePaint(const std::shared_ptr<RuntimeState>& state) {
-    {
-        std::lock_guard<std::mutex> lock(state->lock);
-        state->requestRenderTick = true;
-    }
-    state->cv.notify_one();
+    RequestRenderTick(state);
     return false;
 }
 
@@ -124,6 +127,7 @@ static bool HandleMouseMove(const std::shared_ptr<RuntimeState>& state, HWND hwn
     record.modifiersMask = GetModifiers();
     record.buttonIndex = -1;
     state->inputEvents.EnqueuePointer(record);
+    RequestRenderTick(state);
     return true;
 }
 
@@ -140,6 +144,7 @@ static bool HandleMouseLeave(const std::shared_ptr<RuntimeState>& state, WPARAM 
     record.modifiersMask = GetModifiers();
     record.buttonIndex = -1;
     state->inputEvents.EnqueuePointer(record);
+    RequestRenderTick(state);
     return true;
 }
 
@@ -155,11 +160,7 @@ static bool HandleNcMouseMove(const std::shared_ptr<RuntimeState>& state, HWND h
 
     if (state->cachedMetrics.hoveredCaptionButton != button) {
         state->cachedMetrics.hoveredCaptionButton = button;
-        {
-            std::lock_guard<std::mutex> lock(state->lock);
-            state->requestRenderTick = true;
-        }
-        state->cv.notify_one();
+        RequestRenderTick(state);
     }
     return false;
 }
@@ -167,11 +168,7 @@ static bool HandleNcMouseMove(const std::shared_ptr<RuntimeState>& state, HWND h
 static bool HandleNcMouseLeave(const std::shared_ptr<RuntimeState>& state) {
     if (state->cachedMetrics.hoveredCaptionButton != 0) {
         state->cachedMetrics.hoveredCaptionButton = 0;
-        {
-            std::lock_guard<std::mutex> lock(state->lock);
-            state->requestRenderTick = true;
-        }
-        state->cv.notify_one();
+        RequestRenderTick(state);
     }
     return false;
 }
@@ -191,6 +188,7 @@ static bool HandleMouseButtonDown(const std::shared_ptr<RuntimeState>& state, UI
     record.modifiersMask = GetModifiers();
     record.buttonIndex = btnIdx;
     state->inputEvents.EnqueuePointer(record);
+    RequestRenderTick(state);
     return true;
 }
 
@@ -209,6 +207,7 @@ static bool HandleMouseButtonUp(const std::shared_ptr<RuntimeState>& state, UINT
     record.modifiersMask = GetModifiers();
     record.buttonIndex = btnIdx;
     state->inputEvents.EnqueuePointer(record);
+    RequestRenderTick(state);
     return true;
 }
 
@@ -229,6 +228,7 @@ static bool HandleMouseWheel(const std::shared_ptr<RuntimeState>& state, HWND hw
     record.modifiersMask = GetModifiers();
     record.buttonIndex = -1;
     state->inputEvents.EnqueuePointer(record);
+    RequestRenderTick(state);
     return true;
 }
 
@@ -240,6 +240,7 @@ static bool HandleKey(const std::shared_ptr<RuntimeState>& state, UINT message, 
     record.codePoint = 0;
     record.modifiersMask = GetModifiers();
     state->inputEvents.EnqueueKey(record);
+    RequestRenderTick(state);
     return true;
 }
 
@@ -275,6 +276,7 @@ static bool HandleChar(const std::shared_ptr<RuntimeState>& state, WPARAM wParam
     record.timestampMillis = GetTickCount64();
     record.text = WideToUtf8(wstr);
     state->inputEvents.EnqueueText(record);
+    RequestRenderTick(state);
     return true;
 }
 
@@ -322,6 +324,7 @@ bool ComposeRuntimeHandleMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
         case WM_SETFOCUS:
         case WM_KILLFOCUS:
             state->cachedMetrics.isFocused = (message == WM_SETFOCUS);
+            RequestRenderTick(state);
             return true;
         case WM_SETCURSOR:
             return HandleSetCursor(state, lParam);
