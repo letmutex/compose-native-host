@@ -25,7 +25,11 @@ final class RenderCoordinator: NSObject {
         if hasDriver {
             renderTickRequested = true
             if #available(macOS 14.0, *) {
-                appKitDisplayLink?.isPaused = false
+                if let displayLink = appKitDisplayLink {
+                    DispatchQueue.main.async {
+                        displayLink.isPaused = false
+                    }
+                }
             }
             renderSignalLock.unlock()
             return
