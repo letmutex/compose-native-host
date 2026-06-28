@@ -119,15 +119,20 @@ void HostJvm::RunRenderLoop(int64_t runtimeId, std::atomic<bool>* isHostRunning)
         double frequency = (double)qpf.QuadPart;
 
         while (isHostRunning->load() && state->jvmRuntimeRef) {
-            DwmFlush(); // Block natively until the Desktop Window Manager VBlank
+            {
+                std::unique_lock<std::mutex> lock(state->lock);
+                state->cv.wait(lock, [&] { return state->requestRenderTick || !isHostRunning->load() || !state->jvmRuntimeRef; });
+                state->requestRenderTick = false;
+            }
 
             if (!isHostRunning->load() || !state->jvmRuntimeRef) {
                 break;
             }
 
-            {
-                std::lock_guard<std::mutex> lock(state->lock);
-                state->requestRenderTick = false;
+            DwmFlush(); // Block natively until the Desktop Window Manager VBlank
+
+            if (!isHostRunning->load() || !state->jvmRuntimeRef) {
+                break;
             }
 
             LARGE_INTEGER qpc;

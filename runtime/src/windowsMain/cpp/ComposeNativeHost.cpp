@@ -403,6 +403,16 @@ static void StartSharedLibraryRenderLoop(int64_t runtimeId, std::string mainClas
     }
 
     while (s->isRunning.load() && s->graalRuntimeHandle) {
+        {
+            std::unique_lock<std::mutex> lock(s->lock);
+            s->cv.wait(lock, [&] { return s->requestRenderTick || !s->isRunning.load() || !s->graalRuntimeHandle; });
+            s->requestRenderTick = false;
+        }
+
+        if (!s->isRunning.load() || !s->graalRuntimeHandle) {
+            break;
+        }
+
         if (dwmFlushFn) {
             dwmFlushFn();
         } else {
@@ -411,11 +421,6 @@ static void StartSharedLibraryRenderLoop(int64_t runtimeId, std::string mainClas
 
         if (!s->isRunning.load() || !s->graalRuntimeHandle) {
             break;
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(s->lock);
-            s->requestRenderTick = false;
         }
 
         LARGE_INTEGER qpc;

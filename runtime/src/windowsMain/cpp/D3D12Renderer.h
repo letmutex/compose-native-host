@@ -11,7 +11,7 @@ public:
     ~D3D12Renderer();
 
     bool Initialize(HWND hwnd, int width, int height);
-    void Resize(int width, int height);
+    bool Resize(int width, int height);
     void Shutdown();
 
     IDXGIAdapter1* GetAdapter() const { return adapter_.Get(); }
