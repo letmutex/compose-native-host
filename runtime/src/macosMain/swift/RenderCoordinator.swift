@@ -24,6 +24,9 @@ final class RenderCoordinator: NSObject {
         let hasDriver = appKitDisplayLink != nil || legacyDisplayTimer != nil
         if hasDriver {
             renderTickRequested = true
+            if #available(macOS 14.0, *) {
+                appKitDisplayLink?.isPaused = false
+            }
             renderSignalLock.unlock()
             return
         }
@@ -68,9 +71,9 @@ final class RenderCoordinator: NSObject {
                 return
             }
             displayLink.add(to: .main, forMode: .common)
-            displayLink.isPaused = false
             renderSignalLock.lock()
             appKitDisplayLink = displayLink
+            displayLink.isPaused = !renderTickRequested
             renderSignalLock.unlock()
         } else {
             setupLegacyDisplayTimer(screen: screen)
@@ -146,6 +149,11 @@ final class RenderCoordinator: NSObject {
             renderTickRequested = false
             renderSignalPending = true
             pendingRenderTickVsyncNanos = vsyncNanos
+        }
+        if !renderTickRequested {
+            if #available(macOS 14.0, *) {
+                appKitDisplayLink?.isPaused = true
+            }
         }
         return shouldSignal
     }
