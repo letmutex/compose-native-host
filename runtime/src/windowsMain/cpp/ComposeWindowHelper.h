@@ -17,6 +17,18 @@ private:
     }
 
 public:
+    struct CaptionButtonOptions {
+        bool isDarkMode = false;
+        float buttonWidth = 46.0f;
+        float buttonHeight = 32.0f;
+    };
+
+    struct CaptionDragOptions {
+        float titleBarHeight = 32.0f;
+        float rightReservedWidth = 138.0f;
+        float leftReservedWidth = 0.0f;
+    };
+
     // Initializes GDI+ for the splash screen rendering.
     // Call this once at the start of your application.
     static void Initialize() {
@@ -62,15 +74,25 @@ public:
 
     // Call this inside your WM_NCHITTEST block to enable standard edge resizing
     // while allowing Compose to handle all UI events (HTCLIENT) inside the window.
-    static LRESULT HitTestBorderlessResize(HWND hwnd, WPARAM wParam, LPARAM lParam) {
-        LRESULT result = 0;
-        if (DwmDefWindowProc(hwnd, WM_NCHITTEST, wParam, lParam, &result)) {
-            return result;
-        }
-
+    static LRESULT HitTestBorderlessResize(HWND hwnd, WPARAM wParam, LPARAM lParam, const CaptionButtonOptions& options = {}) {
         POINT pt;
         pt.x = GET_X_LPARAM(lParam);
         pt.y = GET_Y_LPARAM(lParam);
+
+        POINT ptClient = pt;
+        ScreenToClient(hwnd, &ptClient);
+
+        int customButton = DetectHoveredButton(hwnd, ptClient.x, ptClient.y, options);
+        if (customButton == 1) return HTMINBUTTON;
+        if (customButton == 2) return HTMAXBUTTON;
+        if (customButton == 3) return HTCLOSE;
+
+        LRESULT result = 0;
+        if (DwmDefWindowProc(hwnd, WM_NCHITTEST, wParam, lParam, &result)) {
+            if (result != HTMINBUTTON && result != HTMAXBUTTON && result != HTCLOSE) {
+                return result;
+            }
+        }
 
         RECT rcWindow;
         GetWindowRect(hwnd, &rcWindow);
@@ -94,17 +116,6 @@ public:
 
         return HTCLIENT;
     }
-
-    struct CaptionButtonOptions {
-        bool isDarkMode = false;
-        float buttonWidth = 46.0f;
-        float buttonHeight = 32.0f;
-    };
-
-    struct CaptionDragOptions {
-        float buttonWidth = 46.0f;
-        float buttonHeight = 32.0f;
-    };
 
     // Detects which caption button is hovered based on client coordinates
     static int DetectHoveredButton(HWND hwnd, int x, int y, const CaptionButtonOptions& options = {}) {
@@ -161,14 +172,15 @@ public:
         int x = GET_X_LPARAM(lParam);
         int y = GET_Y_LPARAM(lParam);
         
-        int titleBarHeight = (int)std::round(options.buttonHeight * dpiScale);
-        int buttonsWidth = (int)std::round(options.buttonWidth * dpiScale) * 3;
+        int titleBarHeight = (int)std::round(options.titleBarHeight * dpiScale);
+        int rightReserved = (int)std::round(options.rightReservedWidth * dpiScale);
+        int leftReserved = (int)std::round(options.leftReservedWidth * dpiScale);
 
         RECT rcWindow;
         GetClientRect(hwnd, &rcWindow);
 
-        // If click is in the title bar area but NOT inside the buttons area
-        if (y < titleBarHeight && x < rcWindow.right - buttonsWidth) {
+        // If click is in the title bar area but NOT inside the reserved areas
+        if (y >= 0 && y < titleBarHeight && x >= leftReserved && x < (rcWindow.right - rightReserved)) {
             ReleaseCapture();
             SendMessage(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
             return true;
