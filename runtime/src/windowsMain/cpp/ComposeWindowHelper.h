@@ -1,6 +1,7 @@
 #pragma once
 
 #include <windows.h>
+#include "DpiHelper.h"
 #include <windowsx.h>
 #include <dwmapi.h>
 #include <gdiplus.h>
@@ -44,6 +45,8 @@ public:
         }
     }
 
+
+
     // Removes standard Windows borders and extends the client area perfectly
     // into the title bar space.
     static void ExtendContentIntoTitleBar(HWND hwnd) {
@@ -74,7 +77,7 @@ public:
 
     // Call this inside your WM_NCHITTEST block to enable standard edge resizing
     // while allowing Compose to handle all UI events (HTCLIENT) inside the window.
-    static LRESULT HitTestBorderlessResize(HWND hwnd, WPARAM wParam, LPARAM lParam, const CaptionButtonOptions& options = {}) {
+    static LRESULT HitTestFrameAndButtons(HWND hwnd, WPARAM wParam, LPARAM lParam, const CaptionButtonOptions& options = {}) {
         POINT pt;
         pt.x = GET_X_LPARAM(lParam);
         pt.y = GET_Y_LPARAM(lParam);
@@ -119,20 +122,7 @@ public:
 
     // Detects which caption button is hovered based on client coordinates
     static int DetectHoveredButton(HWND hwnd, int x, int y, const CaptionButtonOptions& options = {}) {
-        float dpiScale = 1.0f;
-        HMODULE user32 = GetModuleHandleW(L"user32.dll");
-        if (user32) {
-            typedef UINT(WINAPI *GetDpiForWindowType)(HWND);
-            auto getDpi = (GetDpiForWindowType)GetProcAddress(user32, "GetDpiForWindow");
-            if (getDpi) {
-                dpiScale = getDpi(hwnd) / 96.0f;
-            }
-        }
-        if (dpiScale <= 0.0f) {
-            HDC hdc = GetDC(hwnd);
-            dpiScale = GetDeviceCaps(hdc, LOGPIXELSX) / 96.0f;
-            ReleaseDC(hwnd, hdc);
-        }
+        float dpiScale = GetDpiScale(hwnd);
 
         int btnWidth = (int)std::round(options.buttonWidth * dpiScale);
         int btnHeight = (int)std::round(options.buttonHeight * dpiScale);
@@ -154,20 +144,7 @@ public:
     // before Compose intercepts messages.
     // Returns true if the drag was initiated.
     static bool HandleCaptionDrag(HWND hwnd, LPARAM lParam, const CaptionDragOptions& options = {}) {
-        float dpiScale = 1.0f;
-        HMODULE user32 = GetModuleHandleW(L"user32.dll");
-        if (user32) {
-            typedef UINT(WINAPI *GetDpiForWindowType)(HWND);
-            auto getDpi = (GetDpiForWindowType)GetProcAddress(user32, "GetDpiForWindow");
-            if (getDpi) {
-                dpiScale = getDpi(hwnd) / 96.0f;
-            }
-        }
-        if (dpiScale <= 0.0f) {
-            HDC hdc = GetDC(hwnd);
-            dpiScale = GetDeviceCaps(hdc, LOGPIXELSX) / 96.0f;
-            ReleaseDC(hwnd, hdc);
-        }
+        float dpiScale = GetDpiScale(hwnd);
 
         int x = GET_X_LPARAM(lParam);
         int y = GET_Y_LPARAM(lParam);
@@ -188,23 +165,53 @@ public:
         return false;
     }
 
+    // Handles non-client caption button clicks (minimize, maximize, close) manually.
+    // Call this inside your WM_NCLBUTTONDOWN and WM_NCLBUTTONUP blocks.
+    // Returns true if the message was handled.
+    static bool HandleCaptionButtonClick(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam, const CaptionButtonOptions& options = {}) {
+        if (message == WM_NCLBUTTONDOWN) {
+            POINT pt;
+            pt.x = GET_X_LPARAM(lParam);
+            pt.y = GET_Y_LPARAM(lParam);
+
+            POINT ptClient = pt;
+            ScreenToClient(hwnd, &ptClient);
+
+            int customButton = DetectHoveredButton(hwnd, ptClient.x, ptClient.y, options);
+            if (customButton != 0) {
+                SetPropW(hwnd, L"ComposeCustomBtnDown", (HANDLE)(intptr_t)customButton);
+                return true;
+            }
+        } else if (message == WM_NCLBUTTONUP) {
+            int pressedButton = (int)(intptr_t)GetPropW(hwnd, L"ComposeCustomBtnDown");
+            RemovePropW(hwnd, L"ComposeCustomBtnDown");
+
+            if (pressedButton != 0) {
+                POINT pt;
+                pt.x = GET_X_LPARAM(lParam);
+                pt.y = GET_Y_LPARAM(lParam);
+
+                POINT ptClient = pt;
+                ScreenToClient(hwnd, &ptClient);
+
+                int customButton = DetectHoveredButton(hwnd, ptClient.x, ptClient.y, options);
+                if (customButton == pressedButton) {
+                    if (customButton == 1) PostMessageW(hwnd, WM_SYSCOMMAND, SC_MINIMIZE, 0);
+                    if (customButton == 2) PostMessageW(hwnd, WM_SYSCOMMAND, IsZoomed(hwnd) ? SC_RESTORE : SC_MAXIMIZE, 0);
+                    if (customButton == 3) PostMessageW(hwnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Draws pixel-perfect geometric caption buttons matching Compose Desktop's default style.
     static void DrawCaptionButtons(HWND hwnd, HDC hdc, int hoveredButton = 0, const CaptionButtonOptions& options = {}) {
         RECT rcWindow;
         GetClientRect(hwnd, &rcWindow);
 
-        float dpiScale = 1.0f;
-        HMODULE user32 = GetModuleHandleW(L"user32.dll");
-        if (user32) {
-            typedef UINT(WINAPI *GetDpiForWindowType)(HWND);
-            auto getDpi = (GetDpiForWindowType)GetProcAddress(user32, "GetDpiForWindow");
-            if (getDpi) {
-                dpiScale = getDpi(hwnd) / 96.0f;
-            }
-        }
-        if (dpiScale <= 0.0f) {
-            dpiScale = GetDeviceCaps(hdc, LOGPIXELSX) / 96.0f;
-        }
+        float dpiScale = GetDpiScale(hwnd);
 
         int btnWidth = (int)std::round(options.buttonWidth * dpiScale);
         int btnHeight = (int)std::round(options.buttonHeight * dpiScale);

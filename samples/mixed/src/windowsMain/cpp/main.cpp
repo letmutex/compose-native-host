@@ -203,6 +203,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
     }
 
     switch (message) {
+        case WM_NCLBUTTONDOWN:
+        case WM_NCLBUTTONUP: {
+            if (ComposeWindowHelper::HandleCaptionButtonClick(hwnd, message, wParam, lParam)) {
+                return 0;
+            }
+            break;
+        }
         case WM_NCMOUSEMOVE: {
             if (!isFirstFrameRendered && window) {
                 int hovered = 0;
@@ -239,7 +246,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return ComposeWindowHelper::HideNativeTitleBar(hwnd, wParam, lParam);
         }
         case WM_NCHITTEST: {
-            return ComposeWindowHelper::HitTestBorderlessResize(hwnd, wParam, lParam);
+            return ComposeWindowHelper::HitTestFrameAndButtons(hwnd, wParam, lParam);
         }
         case WM_OPEN_WINDOW:
             CreateSampleWindow();
