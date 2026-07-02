@@ -38,7 +38,7 @@ inline void EnableDpiAwareness() {
     HMODULE shcore = LoadLibraryExW(L"shcore.dll", nullptr, 0x00000800 /* LOAD_LIBRARY_SEARCH_SYSTEM32 */);
     if (shcore) {
         typedef HRESULT (WINAPI *SetProcessDpiAwarenessType)(int);
-        auto setDpiAware = (SetProcessDpiAwarenessType)GetProcAddress(shcore, "SetProcessDpiAware");
+        auto setDpiAware = (SetProcessDpiAwarenessType)GetProcAddress(shcore, "SetProcessDpiAwareness");
         if (setDpiAware) {
             if (SUCCEEDED(setDpiAware(2))) { // PROCESS_PER_MONITOR_DPI_AWARE
                 FreeLibrary(shcore);
