@@ -26,8 +26,12 @@ final class RenderCoordinator: NSObject {
             renderTickRequested = true
             if #available(macOS 14.0, *) {
                 if let displayLink = appKitDisplayLink {
-                    DispatchQueue.main.async {
+                    if Thread.isMainThread {
                         displayLink.isPaused = false
+                    } else {
+                        DispatchQueue.main.async {
+                            displayLink.isPaused = false
+                        }
                     }
                 }
             }
