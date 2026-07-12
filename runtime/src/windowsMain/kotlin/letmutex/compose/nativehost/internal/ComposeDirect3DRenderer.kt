@@ -226,6 +226,7 @@ internal class ComposeDirect3DRenderer(
     override fun close() {
         renderThread.close()
         scene?.close()
+        recorder.close()
         scene = null
         currentWindowInfo = null
     }
