@@ -129,6 +129,10 @@ void HostJvm::RunRenderLoop(int64_t runtimeId, std::atomic<bool>* isHostRunning)
                 break;
             }
 
+            // This tick is not guaranteed to produce a Present: Compose may find no
+            // invalidations after processing input. Do not replace this with a DXGI frame-
+            // latency waitable object here; its auto-reset signal can be consumed by such a
+            // no-op tick and then never re-signaled. See D3D12Renderer::Initialize.
             DwmFlush(); // Block natively until the Desktop Window Manager VBlank
 
             if (!isHostRunning->load() || !state->jvmRuntimeRef) {

@@ -12,6 +12,7 @@ final class RenderCoordinator: NSObject {
 
     private var appKitDisplayLink: CADisplayLink?
     private var legacyDisplayTimer: Timer?
+    private var legacyDisplayTimerPaused = false
 
     var hasDisplaySyncDriver: Bool {
         renderSignalLock.lock()
@@ -32,6 +33,15 @@ final class RenderCoordinator: NSObject {
                         DispatchQueue.main.async {
                             displayLink.isPaused = false
                         }
+                    }
+                }
+            } else if let legacyDisplayTimer, legacyDisplayTimerPaused {
+                legacyDisplayTimerPaused = false
+                if Thread.isMainThread {
+                    legacyDisplayTimer.fireDate = Date()
+                } else {
+                    DispatchQueue.main.async {
+                        legacyDisplayTimer.fireDate = Date()
                     }
                 }
             }
@@ -131,13 +141,19 @@ final class RenderCoordinator: NSObject {
         RunLoop.main.add(timer, forMode: .common)
         renderSignalLock.lock()
         legacyDisplayTimer = timer
+        legacyDisplayTimerPaused = !renderTickRequested
+        let shouldParkTimer = legacyDisplayTimerPaused
         renderSignalLock.unlock()
+        if shouldParkTimer {
+            timer.fireDate = .distantFuture
+        }
     }
 
     private func stopLegacyDisplayTimer() {
         renderSignalLock.lock()
         let timerToInvalidate = legacyDisplayTimer
         legacyDisplayTimer = nil
+        legacyDisplayTimerPaused = false
         renderSignalLock.unlock()
         timerToInvalidate?.invalidate()
     }
@@ -161,6 +177,9 @@ final class RenderCoordinator: NSObject {
         if !renderTickRequested {
             if #available(macOS 14.0, *) {
                 appKitDisplayLink?.isPaused = true
+            } else if let legacyDisplayTimer, !legacyDisplayTimerPaused {
+                legacyDisplayTimerPaused = true
+                legacyDisplayTimer.fireDate = .distantFuture
             }
         }
         return shouldSignal

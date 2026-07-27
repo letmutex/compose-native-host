@@ -15,6 +15,7 @@ import letmutex.compose.nativehost.internal.NativeHostUriHandler
 import letmutex.compose.nativehost.internal.RenderFrameCallback
 import java.lang.ThreadLocal
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -62,6 +63,7 @@ class ComposeRuntime(
     private val framePending = AtomicBoolean(false)
     private val frameLoopScheduled = AtomicBoolean(false)
     private val renderInFlight = AtomicBoolean(false)
+    private val submittedRenderCount = AtomicInteger(0)
     private val pendingFrameVsyncNanos = AtomicLong(0L)
     private val lastFrameRequestNanos = AtomicLong(System.nanoTime())
     private val lastFrameStartNanos = AtomicLong(0L)
@@ -249,6 +251,7 @@ class ComposeRuntime(
         }
         if (shouldCloseRenderer) {
             NativeHostUiThread.shared.callOnUiThread {
+                submittedRenderCount.set(0)
                 renderInFlight.set(false)
                 logFrameTimingSummary()
                 frameTimingLogger?.close()
@@ -294,7 +297,6 @@ class ComposeRuntime(
     private fun schedulePendingFrameLoopIfReady() {
         if (
             framePending.get() &&
-            !renderInFlight.get() &&
             frameLoopScheduled.compareAndSet(false, true)
         ) {
             NativeHostUiThread.shared.post(::processPendingFrames)
@@ -308,6 +310,7 @@ class ComposeRuntime(
             frameLoopScheduled.set(false)
             schedulePendingFrameLoopIfReady()
         } catch (t: Throwable) {
+            submittedRenderCount.set(0)
             renderInFlight.set(false)
             frameLoopScheduled.set(false)
             frameStallWatchdog.onFrameStateChanged()
@@ -343,7 +346,7 @@ class ComposeRuntime(
         val nowNanos = System.nanoTime()
         val inputDrainDurationNanos = nowNanos - renderStartNanos
 
-        renderInFlight.set(true)
+        beginRenderSubmission()
         val rendered = renderer.render(
             windowInfo = windowInfo,
             nanoTime = nowNanos,
@@ -351,7 +354,7 @@ class ComposeRuntime(
             inputDrainNanos = inputDrainDurationNanos,
         )
         if (!rendered) {
-            renderInFlight.set(false)
+            completeRenderSubmission()
         }
     }
 
@@ -361,7 +364,7 @@ class ComposeRuntime(
         inputDrainNanos: Long,
         renderStats: RenderFrameStats,
     ) {
-        renderInFlight.set(false)
+        completeRenderSubmission()
         lastFrameCompleteNanos.set(System.nanoTime())
         schedulePendingFrameLoopIfReady()
         frameStallWatchdog.onFrameStateChanged()
@@ -376,6 +379,23 @@ class ComposeRuntime(
             inputDrainNanos = inputDrainNanos,
             renderStats = renderStats,
         )
+    }
+
+    /**
+     * The render thread may keep one queued picture while another is being submitted to the GPU.
+     * Count accepted submissions so a coalesced picture can complete independently of the one ahead
+     * of it.
+     */
+    private fun beginRenderSubmission() {
+        submittedRenderCount.incrementAndGet()
+        renderInFlight.set(true)
+    }
+
+    private fun completeRenderSubmission() {
+        val remaining = submittedRenderCount.updateAndGet { count ->
+            if (count > 0) count - 1 else 0
+        }
+        renderInFlight.set(remaining > 0)
     }
 
     private fun emitProfileFrameSample(

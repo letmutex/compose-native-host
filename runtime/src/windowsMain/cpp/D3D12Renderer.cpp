@@ -56,6 +56,12 @@ bool D3D12Renderer::Initialize(HWND hwnd, int width, int height) {
     swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     swapChainDesc.SampleDesc.Count = 1;
+    // Do not add DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT here.
+    // The host's render signal can be caused by input or window events that Compose later
+    // determines need no repaint. Waiting on that consumptive handle before that decision
+    // can consume its signal without a Present to re-arm it, permanently stalling rendering.
+    // A waitable-object implementation requires an explicit submission acknowledgement and
+    // a separate display clock; DwmFlush remains the safe pacing mechanism for this host.
 
     Microsoft::WRL::ComPtr<IDXGISwapChain1> swapChain1;
     if (FAILED(factory->CreateSwapChainForHwnd(

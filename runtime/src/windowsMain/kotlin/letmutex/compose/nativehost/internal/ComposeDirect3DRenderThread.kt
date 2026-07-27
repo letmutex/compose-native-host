@@ -65,7 +65,10 @@ internal class ComposeDirect3DRenderThread(
                 return false
             }
             val shouldSignal = !hasPendingRenderRequest
-            pendingRenderRequest.picture?.close()
+            pendingRenderRequest.picture?.let {
+                notifyFrameDiscarded(pendingRenderRequest)
+                it.close()
+            }
             pendingRenderRequest.set(
                 windowInfo = windowInfo,
                 picture = picture,
@@ -167,6 +170,16 @@ internal class ComposeDirect3DRenderThread(
                 return
             }
         }
+    }
+
+    private fun notifyFrameDiscarded(request: PendingDirect3DRenderRequest) {
+        val windowInfo = request.windowInfo ?: return
+        renderFrameCallback.onFrameRendered(
+            refreshRate = windowInfo.refreshRate,
+            dispatchDelayNanos = request.dispatchDelayNanos,
+            inputDrainNanos = request.inputDrainNanos,
+            renderStats = RenderFrameStats.NotRendered,
+        )
     }
 
     fun clearRenderSurfaceCache() {
