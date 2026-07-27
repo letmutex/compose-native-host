@@ -63,7 +63,10 @@ internal class ComposeMetalRenderThread(
                 return false
             }
             val shouldSignal = !hasPendingRenderRequest
-            pendingRenderRequest.picture?.close()
+            pendingRenderRequest.picture?.let {
+                notifyFrameDiscarded(pendingRenderRequest)
+                it.close()
+            }
             pendingRenderRequest.set(
                 windowInfo = windowInfo,
                 picture = picture,
@@ -157,6 +160,16 @@ internal class ComposeMetalRenderThread(
                 return
             }
         }
+    }
+
+    private fun notifyFrameDiscarded(request: PendingRenderRequest) {
+        val windowInfo = request.windowInfo ?: return
+        renderFrameCallback.onFrameRendered(
+            refreshRate = windowInfo.refreshRate,
+            dispatchDelayNanos = request.dispatchDelayNanos,
+            inputDrainNanos = request.inputDrainNanos,
+            renderStats = RenderFrameStats.NotRendered,
+        )
     }
 
     fun clearRenderSurfaceCache() {

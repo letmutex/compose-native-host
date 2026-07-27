@@ -361,6 +361,9 @@ static void StartSharedLibraryRenderLoop(int64_t runtimeId, std::string mainClas
             break;
         }
 
+        // A render tick can be a no-op after Compose checks invalidations. Do not use a
+        // DXGI frame-latency waitable object here: it is auto-reset and a no-op tick could
+        // consume its signal without a Present to re-arm it. See D3D12Renderer::Initialize.
         if (dwmFlushFn) {
             dwmFlushFn();
         } else {
