@@ -106,7 +106,9 @@ class ComposeRuntime(
         check(boundContent != null) {
             "Hosted runtime entry point must call ComposeNativeHost { ... }."
         }
-        ensureInitialized()
+        if (ensureInitialized()) {
+            bridge.requestRender()
+        }
     }
 
     @JvmName("isContentBound")
