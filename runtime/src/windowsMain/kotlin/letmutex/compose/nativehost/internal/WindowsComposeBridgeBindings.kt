@@ -75,6 +75,10 @@ internal object WindowsComposeBridgeBindings {
 
     external fun nativeHostClearTextInputGeometry(runtimeId: Long)
 
+    external fun nativeHostReadClipboardText(): String?
+
+    external fun nativeHostWriteClipboardText(text: String): Boolean
+
     external fun nativeHostPollFrameState(
         runtimeId: Long,
         maxCount: Int,
