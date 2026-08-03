@@ -12,8 +12,23 @@ permissions:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    name: Publish ${{ matrix.platform }} artifacts
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Windows
+            runner: windows-latest
+            gradle_command: .\gradlew.bat
+            publish_tasks: >-
+              :gradle-plugin:publish
+              :runtime:publish
+          - platform: macOS
+            runner: macos-latest
+            gradle_command: ./gradlew
+            publish_tasks: :runtime:publish
 
     steps:
       - name: Check out repository
@@ -33,7 +48,7 @@ jobs:
         run: java --version
 
       - name: Deploy to Sonatype
-        run: ./gradlew publish --no-configuration-cache
+        run: ${{ matrix.gradle_command }} ${{ matrix.publish_tasks }} --no-configuration-cache
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
