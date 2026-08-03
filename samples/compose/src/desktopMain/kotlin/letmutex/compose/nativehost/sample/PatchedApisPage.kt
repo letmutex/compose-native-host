@@ -82,7 +82,9 @@ internal fun PatchedApisPage(
     val clipboardManager = LocalClipboardManager.current
     val coroutineScope = rememberCoroutineScope()
     var clipboardDraft by remember {
-        mutableStateOf("Compose Native Host patched runtime check")
+        mutableStateOf(
+            "English · 中文 · 日本語 · 한국어 · Русский · العربية · हिन्दी · ไทย · Ελληνικά · עברית · 🚀",
+        )
     }
     var clipboardStatus by remember {
         mutableStateOf(

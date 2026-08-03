@@ -1,4 +1,5 @@
 #include <jni.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <mutex>
@@ -20,6 +21,56 @@ struct NativeFrameStateJniCache {
 
 static NativeFrameStateJniCache nativeFrameStateJniCache = {0};
 static std::mutex jniCacheMutex;
+
+struct ClipboardWindowSearch {
+    DWORD processId;
+    HWND window;
+};
+
+static BOOL CALLBACK findClipboardOwnerWindowCallback(HWND window, LPARAM parameter) {
+    auto *search = reinterpret_cast<ClipboardWindowSearch *>(parameter);
+    DWORD processId = 0;
+    GetWindowThreadProcessId(window, &processId);
+    if (processId == search->processId) {
+        search->window = window;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static HWND findClipboardOwnerWindow() {
+    // EmptyClipboard requires a non-null window owner before SetClipboardData.
+    // Prefer the active host window, then fall back to any window from this process.
+    HWND foregroundWindow = GetForegroundWindow();
+    if (foregroundWindow != nullptr) {
+        DWORD processId = 0;
+        GetWindowThreadProcessId(foregroundWindow, &processId);
+        if (processId == GetCurrentProcessId()) {
+            return foregroundWindow;
+        }
+    }
+
+    ClipboardWindowSearch search = { GetCurrentProcessId(), nullptr };
+    EnumWindows(
+        findClipboardOwnerWindowCallback,
+        reinterpret_cast<LPARAM>(&search)
+    );
+    return search.window;
+}
+
+static bool openClipboardWithRetry(HWND ownerWindow) {
+    constexpr int maxAttempts = 10;
+    constexpr DWORD retryDelayMillis = 5;
+    for (int attempt = 0; attempt < maxAttempts; ++attempt) {
+        if (OpenClipboard(ownerWindow)) {
+            return true;
+        }
+        if (attempt + 1 < maxAttempts) {
+            Sleep(retryDelayMillis);
+        }
+    }
+    return false;
+}
 
 static jboolean ensureNativeFrameStateJniCache(
     JNIEnv *env,
@@ -321,6 +372,97 @@ Java_letmutex_compose_nativehost_internal_WindowsComposeBridgeBindings_nativeHos
     jlong runtimeId
 ) {
     nativeHostClearTextInputGeometry((int64_t)runtimeId);
+}
+
+JNIEXPORT jstring JNICALL
+Java_letmutex_compose_nativehost_internal_WindowsComposeBridgeBindings_nativeHostReadClipboardText(
+    JNIEnv *env,
+    jobject self
+) {
+    if (!openClipboardWithRetry(nullptr)) {
+        return nullptr;
+    }
+
+    HANDLE clipboardData = GetClipboardData(CF_UNICODETEXT);
+    if (clipboardData == nullptr) {
+        CloseClipboard();
+        return nullptr;
+    }
+
+    const wchar_t *text = static_cast<const wchar_t *>(GlobalLock(clipboardData));
+    if (text == nullptr) {
+        CloseClipboard();
+        return nullptr;
+    }
+
+    SIZE_T capacity = GlobalSize(clipboardData) / sizeof(wchar_t);
+    SIZE_T length = 0;
+    while (length < capacity && text[length] != L'\0') {
+        ++length;
+    }
+
+    jstring result = nullptr;
+    if (length <= INT_MAX) {
+        result = env->NewString(
+            reinterpret_cast<const jchar *>(text),
+            static_cast<jsize>(length)
+        );
+    }
+    GlobalUnlock(clipboardData);
+    CloseClipboard();
+    return result;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_letmutex_compose_nativehost_internal_WindowsComposeBridgeBindings_nativeHostWriteClipboardText(
+    JNIEnv *env,
+    jobject self,
+    jstring text
+) {
+    if (text == nullptr) {
+        return JNI_FALSE;
+    }
+
+    jsize length = env->GetStringLength(text);
+    SIZE_T byteCount = (static_cast<SIZE_T>(length) + 1) * sizeof(wchar_t);
+    HGLOBAL clipboardData = GlobalAlloc(GMEM_MOVEABLE, byteCount);
+    if (clipboardData == nullptr) {
+        return JNI_FALSE;
+    }
+
+    wchar_t *buffer = static_cast<wchar_t *>(GlobalLock(clipboardData));
+    if (buffer == nullptr) {
+        GlobalFree(clipboardData);
+        return JNI_FALSE;
+    }
+    env->GetStringRegion(text, 0, length, reinterpret_cast<jchar *>(buffer));
+    if (env->ExceptionCheck()) {
+        GlobalUnlock(clipboardData);
+        GlobalFree(clipboardData);
+        return JNI_FALSE;
+    }
+    buffer[length] = L'\0';
+    GlobalUnlock(clipboardData);
+
+    HWND ownerWindow = findClipboardOwnerWindow();
+    if (ownerWindow == nullptr || !openClipboardWithRetry(ownerWindow)) {
+        GlobalFree(clipboardData);
+        return JNI_FALSE;
+    }
+    if (!EmptyClipboard()) {
+        CloseClipboard();
+        GlobalFree(clipboardData);
+        return JNI_FALSE;
+    }
+    if (SetClipboardData(CF_UNICODETEXT, clipboardData) == nullptr) {
+        CloseClipboard();
+        GlobalFree(clipboardData);
+        return JNI_FALSE;
+    }
+
+    CloseClipboard();
+    // The system owns clipboardData after SetClipboardData succeeds.
+    return JNI_TRUE;
 }
 
 JNIEXPORT jboolean JNICALL
