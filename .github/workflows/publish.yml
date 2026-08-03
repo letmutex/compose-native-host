@@ -24,11 +24,12 @@ jobs:
             gradle_command: .\gradlew.bat
             publish_tasks: >-
               :gradle-plugin:publish
-              :runtime:publish
+              :runtime:publishKotlinMultiplatformPublicationToMavenCentralRepository
+              :runtime:publishWindowsPublicationToMavenCentralRepository
           - platform: macOS
             runner: macos-latest
             gradle_command: ./gradlew
-            publish_tasks: :runtime:publish
+            publish_tasks: :runtime:publishMacosPublicationToMavenCentralRepository
 
     steps:
       - name: Check out repository
