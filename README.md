@@ -47,7 +47,7 @@ kotlin {
     sourceSets {
         val desktopMain by getting {
             dependencies {
-                implementation("io.github.letmutex.compose-native-host:runtime-macos:<VERSION>") // or runtime-windows
+                implementation("io.github.letmutex.compose-native-host:runtime-macos:<VERSION>")
                 implementation(compose.desktop.currentOs)
             }
         }
