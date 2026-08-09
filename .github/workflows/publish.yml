@@ -24,7 +24,6 @@ jobs:
             gradle_command: .\gradlew.bat
             publish_tasks: >-
               :gradle-plugin:publish
-              :runtime:publishKotlinMultiplatformPublicationToMavenCentralRepository
               :runtime:publishWindowsPublicationToMavenCentralRepository
           - platform: macOS
             runner: macos-latest

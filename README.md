@@ -1,8 +1,8 @@
 <h1 align="center">Compose Native Host</h1>
 <p align="center">Compose in native macOS and Windows windows</p>
 <p align="center">
-  <a href="https://central.sonatype.com/artifact/io.github.letmutex.compose-native-host/runtime">
-    <img alt="Maven Central Version" src="https://img.shields.io/maven-central/v/io.github.letmutex.compose-native-host/runtime?label=Maven%20Central&style=flat-square">
+  <a href="https://central.sonatype.com/artifact/io.github.letmutex.compose-native-host/runtime-macos">
+    <img alt="Maven Central Version" src="https://img.shields.io/maven-central/v/io.github.letmutex.compose-native-host/runtime-macos?label=Maven%20Central&style=flat-square">
   </a>
 </p>
 
@@ -47,7 +47,7 @@ kotlin {
     sourceSets {
         val desktopMain by getting {
             dependencies {
-                implementation("io.github.letmutex.compose-native-host:runtime:<VERSION>")
+                implementation("io.github.letmutex.compose-native-host:runtime-macos:<VERSION>") // or runtime-windows
                 implementation(compose.desktop.currentOs)
             }
         }
@@ -187,7 +187,7 @@ Use `macosRun` or `windowsRun` for the staged JVM application. On macOS and Wind
 
 ## Modules
 
-- `runtime`: shared host API plus macOS runtime, native bridge, and native host sources.
+- `runtime`: shared host API plus native bridge and native host sources (published as platform-specific artifacts: `runtime-macos` and `runtime-windows`).
 - `gradle-plugin`: Gradle plugin for macOS launcher generation, bundle staging, and macOS app tasks.
 - `samples/compose`: pure Compose Desktop sample app and shared Kotlin sample content.
 - `samples/appkit`: AppKit-owned sample window using the shared hosted Kotlin sample.
