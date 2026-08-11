@@ -3,24 +3,15 @@ package letmutex.compose.nativehost.plugin
 import org.gradle.api.GradleException
 import org.gradle.api.Project
 
-internal fun resolveGraalVmHome(project: Project): String =
+internal fun resolveJavaHome(project: Project): String =
     findResolvableGraalVmHome(project)
         ?: throw GradleException(
             "Set graalvmHome, GRAALVM_HOME, org.gradle.java.home, or JAVA_HOME to a GraalVM installation before running native-image tasks.",
         )
 
 private fun findResolvableGraalVmHome(project: Project): String? {
-    var dir: java.io.File? = project.projectDir
-    var localProps: java.io.File? = null
-    while (dir != null) {
-        val f = java.io.File(dir, "local.properties")
-        if (f.exists()) {
-            localProps = f
-            break
-        }
-        dir = dir.parentFile
-    }
-    if (localProps != null) {
+    val localProps = project.rootProject.file("local.properties")
+    if (localProps.exists()) {
         val props = java.util.Properties()
         localProps.inputStream().use { props.load(it) }
         val graalvmHome = props.getProperty("graalvmHome")
