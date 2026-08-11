@@ -125,7 +125,7 @@ fun registerNativeImageCompileInteropJavaTask(
         outputs.dir(classesDir)
 
         doFirst {
-            val graalHome = resolveGraalVmHome(project)
+            val graalHome = resolveJavaHome(project)
             val composeUberJar = config.filteredComposeUberJarFile
             val sourceFiles =
                 (project.fileTree(config.generatedHelperSourcesDir).matching { include("**/*.java") }.files +
@@ -264,7 +264,7 @@ internal fun registerNativeImageBuildSharedLibraryTask(
         outputs.file(sharedLibraryFile(config, flavor))
 
         doFirst {
-            val graalHome = resolveGraalVmHome(project)
+            val graalHome = resolveJavaHome(project)
             val composeUberJar = config.filteredComposeUberJarFile
             val sharedLibraryOutputDir = sharedLibraryOutputDir(config, flavor)
             sharedLibraryOutputDir.mkdirs()

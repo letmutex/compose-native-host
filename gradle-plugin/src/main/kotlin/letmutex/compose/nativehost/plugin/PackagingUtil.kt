@@ -36,13 +36,6 @@ internal fun resolveMainClass(project: Project, extension: ComposeNativeHostPlug
     return "letmutex.compose.nativehost.sample.MainKt"
 }
 
-internal fun resolveJavaHome(project: Project): String =
-    project.providers.gradleProperty("org.gradle.java.home")
-        .orElse(project.providers.environmentVariable("JAVA_HOME"))
-        .orElse(project.providers.environmentVariable("GRAALVM_HOME"))
-        .orNull
-        ?: throw GradleException("JAVA_HOME is required to build the native host launcher.")
-
 internal fun swiftSources(directory: File): List<File> {
     if (!directory.exists()) {
         return emptyList()
