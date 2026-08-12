@@ -377,35 +377,50 @@ private fun filterComposeUberJarForNativeImage(
     }
 }
 
-private fun nativeImageHostResourceFilter(): NativeImageHostResourceFilter {
-    val osName = System.getProperty("os.name").lowercase(Locale.US)
-    val osArch = System.getProperty("os.arch").lowercase(Locale.US)
+internal fun nativeImageHostResourceFilter(
+    osName: String = System.getProperty("os.name"),
+    osArch: String = System.getProperty("os.arch"),
+): NativeImageHostResourceFilter {
+    val normalizedOsName = osName.lowercase(Locale.US)
+    val normalizedOsArch = osArch.lowercase(Locale.US)
     return when {
-        osName.contains("mac") ->
+        normalizedOsName.contains("mac") || normalizedOsName.contains("darwin") ->
             NativeImageHostResourceFilter(
                 hostLibrarySuffixes = setOf(".dylib", ".jnilib"),
                 hostOsTokens = setOf("mac", "macos", "osx", "darwin"),
                 hostArchTokens =
-                    when (osArch) {
+                    when (normalizedOsArch) {
                         "aarch64", "arm64" -> setOf("aarch64", "arm64")
-                        "amd64", "x86_64" -> setOf("amd64", "x64", "x86_64")
-                        else -> throw GradleException("Unsupported macOS arch for Compose Native Host native-image filtering: ${System.getProperty("os.arch")}")
+                        "amd64", "x64", "x86-64", "x86_64" -> setOf("amd64", "x64", "x86-64", "x86_64")
+                        else -> throw GradleException("Unsupported macOS arch for Compose Native Host native-image filtering: $osArch")
                     },
             )
 
-        osName.contains("win") ->
+        normalizedOsName.contains("win") ->
             NativeImageHostResourceFilter(
                 hostLibrarySuffixes = setOf(".dll"),
-                hostOsTokens = setOf("win", "windows"),
+                hostOsTokens = setOf("win32", "windows"),
                 hostArchTokens =
-                    when (osArch) {
+                    when (normalizedOsArch) {
                         "aarch64", "arm64" -> setOf("aarch64", "arm64")
-                        "amd64", "x64", "x86_64" -> setOf("amd64", "x64", "x86_64")
-                        else -> throw GradleException("Unsupported Windows arch for Compose Native Host native-image filtering: ${System.getProperty("os.arch")}")
+                        "amd64", "x64", "x86-64", "x86_64" -> setOf("amd64", "x64", "x86-64", "x86_64")
+                        else -> throw GradleException("Unsupported Windows arch for Compose Native Host native-image filtering: $osArch")
                     },
             )
 
-        else -> throw GradleException("Unsupported host OS for Compose Native Host native-image filtering: ${System.getProperty("os.name")}")
+        normalizedOsName.contains("linux") ->
+            NativeImageHostResourceFilter(
+                hostLibrarySuffixes = setOf(".so"),
+                hostOsTokens = setOf("linux"),
+                hostArchTokens =
+                    when (normalizedOsArch) {
+                        "aarch64", "arm64" -> setOf("aarch64", "arm64")
+                        "amd64", "x64", "x86-64", "x86_64" -> setOf("amd64", "x64", "x86-64", "x86_64")
+                        else -> throw GradleException("Unsupported Linux arch for Compose Native Host native-image filtering: $osArch")
+                    },
+            )
+
+        else -> throw GradleException("Unsupported host OS for Compose Native Host native-image filtering: $osName")
     }
 }
 
