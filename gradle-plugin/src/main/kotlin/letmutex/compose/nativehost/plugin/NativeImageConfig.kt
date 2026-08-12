@@ -93,8 +93,9 @@ private fun matchingTokens(
 
 private val nativeFileSuffixes = setOf(".dylib", ".jnilib", ".so", ".dll")
 private val nativeChecksumSuffixes = nativeFileSuffixes.mapTo(linkedSetOf()) { "$it.sha256" }
-private val knownOsTokens = setOf("linux", "windows", "mac", "macos", "osx", "darwin", "freebsd")
-private val knownArchTokens = setOf("aarch64", "arm64", "armv6", "armv7", "arm", "amd64", "x64", "x86_64", "x86", "ppc64")
+private val knownOsTokens = setOf("linux", "win32", "windows", "mac", "macos", "osx", "darwin", "freebsd")
+private val knownArchTokens =
+    setOf("aarch64", "arm64", "armv6", "armv7", "arm", "amd64", "x64", "x86-64", "x86_64", "x86", "ppc64")
 
 internal fun sharedLibraryFile(
     config: NativeImageExperimentConfig,
