@@ -334,6 +334,13 @@ static void StartSharedLibraryRenderLoop(int64_t runtimeId, std::string mainClas
         return;
     }
 
+    {
+        ComposeHostEvent ev{};
+        ev.type = ComposeHostEventType::PhaseChanged;
+        ev.phase = ComposeHostLaunchPhase::JvmReady;
+        s->EmitEvent(ev);
+    }
+
     LARGE_INTEGER qpf;
     QueryPerformanceFrequency(&qpf);
     double frequency = (double)qpf.QuadPart;
@@ -397,6 +404,11 @@ static void StartJvmRenderLoop(int64_t runtimeId, std::string mainClassName, boo
     auto s = HostJvm::Get().GetRuntime(runtimeId);
     if (!s) return;
     if (HostJvm::Get().PrepareRuntime(runtimeId, mainClassName, enableProfile)) {
+        ComposeHostEvent ev{};
+        ev.type = ComposeHostEventType::PhaseChanged;
+        ev.phase = ComposeHostLaunchPhase::JvmReady;
+        s->EmitEvent(ev);
+
         HostJvm::Get().RunRenderLoop(runtimeId, &s->isRunning);
     } else {
         std::cerr << "Failed to prepare JVM Compose native runtime." << std::endl;
@@ -426,8 +438,21 @@ HCOMPOSERUNTIME ComposeRuntimeCreate(HWND hwnd, const ComposeRuntimeConfiguratio
     state->cachedMetrics.isFocused = (GetFocus() == hwnd);
     state->cachedMetrics.isMaximized = IsZoomed(hwnd);
 
+    state->isWindowFocused.store(GetFocus() == hwnd);
+    state->isWindowOccluded.store(IsIconic(hwnd) != FALSE);
+
+    HostJvm::Get().RegisterRuntime(runtimeId, state);
+
+    {
+        ComposeHostEvent ev{};
+        ev.type = ComposeHostEventType::PhaseChanged;
+        ev.phase = ComposeHostLaunchPhase::Launching;
+        state->EmitEvent(ev);
+    }
+
     if (!state->renderer.Initialize(hwnd, clientWidth, clientHeight)) {
         std::cerr << "Failed to initialize D3D12 Renderer." << std::endl;
+        HostJvm::Get().UnregisterRuntime(runtimeId);
         return nullptr;
     }
 
@@ -439,7 +464,12 @@ HCOMPOSERUNTIME ComposeRuntimeCreate(HWND hwnd, const ComposeRuntimeConfiguratio
         dropTarget->Release();
     }
 
-    HostJvm::Get().RegisterRuntime(runtimeId, state);
+    {
+        ComposeHostEvent ev{};
+        ev.type = ComposeHostEventType::PhaseChanged;
+        ev.phase = ComposeHostLaunchPhase::WindowAttached;
+        state->EmitEvent(ev);
+    }
 
     std::string mainClassName = config.kotlinMainClass;
     if (mainClassName.empty()) {
@@ -472,6 +502,13 @@ void ComposeRuntimeDestroy(HCOMPOSERUNTIME runtime) {
     if (!state) return;
 
     {
+        ComposeHostEvent ev{};
+        ev.type = ComposeHostEventType::PhaseChanged;
+        ev.phase = ComposeHostLaunchPhase::Closing;
+        state->EmitEvent(ev);
+    }
+
+    {
         std::lock_guard<std::mutex> lock(state->lock);
         state->isRunning = false;
         state->requestRenderTick = true;
@@ -499,5 +536,24 @@ void ComposeRuntimeSetEventCallback(HCOMPOSERUNTIME runtime, ComposeRuntimeEvent
         state->eventUserData = userData;
     }
 }
+
+ComposeHostLaunchPhase ComposeRuntimeGetLaunchPhase(HCOMPOSERUNTIME runtime) {
+    int64_t runtimeId = (int64_t)runtime;
+    auto state = HostJvm::Get().GetRuntime(runtimeId);
+    return state ? state->currentPhase.load() : ComposeHostLaunchPhase::Closing;
+}
+
+bool ComposeRuntimeIsWindowFocused(HCOMPOSERUNTIME runtime) {
+    int64_t runtimeId = (int64_t)runtime;
+    auto state = HostJvm::Get().GetRuntime(runtimeId);
+    return state ? state->isWindowFocused.load() : false;
+}
+
+bool ComposeRuntimeIsWindowOccluded(HCOMPOSERUNTIME runtime) {
+    int64_t runtimeId = (int64_t)runtime;
+    auto state = HostJvm::Get().GetRuntime(runtimeId);
+    return state ? state->isWindowOccluded.load() : false;
+}
+
 
 

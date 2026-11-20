@@ -38,21 +38,34 @@ static std::string WideToUtf8(const std::wstring& wstr) {
 }
 
 static bool HandleSize(const std::shared_ptr<RuntimeState>& state, WPARAM wParam, LPARAM lParam) {
-    if (wParam != SIZE_MINIMIZED) {
-        int width = LOWORD(lParam);
-        int height = HIWORD(lParam);
-        state->cachedMetrics.width = width;
-        state->cachedMetrics.height = height;
-        state->cachedMetrics.isMaximized = (wParam == SIZE_MAXIMIZED);
-
-        {
-            std::lock_guard<std::mutex> lock(state->lock);
-            state->pendingWidth = width;
-            state->pendingHeight = height;
-            state->resizePending = true;
-        }
-        RequestRenderTick(state);
+    if (wParam == SIZE_MINIMIZED) {
+        ComposeHostEvent ev{};
+        ev.type = ComposeHostEventType::WindowOccluded;
+        ev.occluded = true;
+        state->EmitEvent(ev);
+        return true;
     }
+
+    {
+        ComposeHostEvent ev{};
+        ev.type = ComposeHostEventType::WindowOccluded;
+        ev.occluded = false;
+        state->EmitEvent(ev);
+    }
+
+    int width = LOWORD(lParam);
+    int height = HIWORD(lParam);
+    state->cachedMetrics.width = width;
+    state->cachedMetrics.height = height;
+    state->cachedMetrics.isMaximized = (wParam == SIZE_MAXIMIZED);
+
+    {
+        std::lock_guard<std::mutex> lock(state->lock);
+        state->pendingWidth = width;
+        state->pendingHeight = height;
+        state->resizePending = true;
+    }
+    RequestRenderTick(state);
     return true;
 }
 
@@ -321,11 +334,25 @@ bool ComposeRuntimeHandleMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
             return HandlePaint(state);
         case WM_ERASEBKGND:
             return true;
+        case WM_SHOWWINDOW: {
+            bool occluded = (wParam == FALSE) || (IsIconic(hwnd) != FALSE);
+            ComposeHostEvent ev{};
+            ev.type = ComposeHostEventType::WindowOccluded;
+            ev.occluded = occluded;
+            state->EmitEvent(ev);
+            return false;
+        }
         case WM_SETFOCUS:
-        case WM_KILLFOCUS:
-            state->cachedMetrics.isFocused = (message == WM_SETFOCUS);
+        case WM_KILLFOCUS: {
+            bool focused = (message == WM_SETFOCUS);
+            state->cachedMetrics.isFocused = focused;
             RequestRenderTick(state);
+            ComposeHostEvent ev{};
+            ev.type = ComposeHostEventType::WindowFocused;
+            ev.focused = focused;
+            state->EmitEvent(ev);
             return true;
+        }
         case WM_SETCURSOR:
             return HandleSetCursor(state, lParam);
         case WM_DPICHANGED:

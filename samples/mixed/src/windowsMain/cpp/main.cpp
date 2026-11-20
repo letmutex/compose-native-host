@@ -36,19 +36,38 @@ std::shared_ptr<SampleWindow> GetSampleWindow(HWND hwnd) {
 }
 
 
-void OnComposeEvent(HCOMPOSERUNTIME runtime, const char* name, const char* payload, void* userData) {
-    if (!name) return;
-    std::cout << "[C++ Callback] Event received: " << name << ", payload: " << (payload ? payload : "null") << std::endl;
-    if (strcmp(name, "phaseChanged") == 0 && payload && strcmp(payload, "firstFramePresented") == 0) {
-        HWND hwnd = (HWND)userData;
-        if (auto window = GetSampleWindow((HWND)userData)) {
-            window->isFirstFrameRendered = true;
-        }
-    } else if (strcmp(name, "sample.window.open") == 0) {
-        HWND hwnd = (HWND)userData;
-        if (hwnd) {
-            PostMessageW(hwnd, WM_OPEN_WINDOW, 0, 0);
-        }
+void OnComposeEvent(HCOMPOSERUNTIME runtime, const ComposeHostEvent* event, void* userData) {
+    if (!event) return;
+    HWND hwnd = (HWND)userData;
+    auto window = GetSampleWindow(hwnd);
+
+    switch (event->type) {
+        case ComposeHostEventType::PhaseChanged:
+            std::cout << "[C++ Callback] Phase changed: " << (int)event->phase << std::endl;
+            if (event->phase == ComposeHostLaunchPhase::FirstFramePresented) {
+                if (window) {
+                    window->isFirstFrameRendered = true;
+                }
+            }
+            break;
+
+        case ComposeHostEventType::WindowFocused:
+            std::cout << "[C++ Callback] Window focus changed: " << (event->focused ? "true" : "false") << std::endl;
+            break;
+
+        case ComposeHostEventType::WindowOccluded:
+            std::cout << "[C++ Callback] Window occluded: " << (event->occluded ? "true" : "false") << std::endl;
+            break;
+
+        case ComposeHostEventType::App:
+            std::cout << "[C++ Callback] App event: " << (event->app.name ? event->app.name : "null")
+                      << ", payload: " << (event->app.payload ? event->app.payload : "null") << std::endl;
+            if (event->app.name && strcmp(event->app.name, "sample.window.open") == 0) {
+                if (hwnd) {
+                    PostMessageW(hwnd, WM_OPEN_WINDOW, 0, 0);
+                }
+            }
+            break;
     }
 }
 
