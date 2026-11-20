@@ -1,12 +1,14 @@
-# Swift Runtime API
+# macOS Runtime API
 
-Public app-facing Swift API surface for the native host runtime.
+Public app-facing Swift API surface for the macOS native host runtime.
 
 This snapshot intentionally excludes low-level bridge exports from `Exports.swift` and other internal host plumbing that is not meant to be used directly from app code.
 
 ## Startup and configuration
 
 ```swift
+// Use: import ComposeNativeHost
+
 public enum ComposeHostLaunchPhase: String {
     /// Host process startup has begun.
     case launching
@@ -89,6 +91,8 @@ public struct ComposeHostConfiguration {
 ## App integration
 
 ```swift
+// Use: import ComposeNativeHost
+
 open class ComposeAppDelegateBase: NSObject, NSApplicationDelegate {
     /// Creates a host app delegate with the default configuration.
     public override init()
@@ -144,6 +148,8 @@ public final class ComposeHostRuntime: NSObject, ObservableObject {
 ## Hosted views
 
 ```swift
+// Use: import ComposeNativeHost
+
 public struct ComposeView: NSViewRepresentable {
     /// Creates a SwiftUI wrapper around a hosted runtime.
     public init(runtime: ComposeHostRuntime)
@@ -164,6 +170,8 @@ public final class ComposeNSView: NSView {
 ## Lifecycle and logging
 
 ```swift
+// Use: import ComposeNativeHost
+
 /// Emits a phase timing log line when host logging is enabled.
 public func logPhaseTiming(_ name: String)
 

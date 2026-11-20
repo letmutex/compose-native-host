@@ -24,7 +24,8 @@
 ## Documentation
 
 - [docs/kotlin-runtime-api.md](./docs/kotlin-runtime-api.md): Kotlin runtime API snapshot
-- [docs/swift-runtime-api.md](./docs/swift-runtime-api.md): Swift runtime API snapshot
+- [docs/macos-runtime-api.md](./docs/macos-runtime-api.md): macOS Swift runtime API snapshot
+- [docs/windows-runtime-api.md](./docs/windows-runtime-api.md): Windows C++ runtime API snapshot
 - [docs/windows-support.md](./docs/windows-support.md): Windows support architecture, setup, and compile details
 - [gradle-plugin/README.md](./gradle-plugin/README.md): Gradle plugin configuration and task reference
 

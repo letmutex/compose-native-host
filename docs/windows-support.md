@@ -44,7 +44,7 @@ composeNativeHost {
     appName.set("My Compose App")
     
     windows {
-        // Optional custom launcher C++ source directory. Defaults to internal extracted template.
+        // Custom launcher C++ source directory. Defaults to "src/windowsMain/cpp".
         launcherSourcesDir.set(layout.projectDirectory.dir("src/windowsMain/cpp"))
     }
 }

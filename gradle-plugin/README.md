@@ -13,7 +13,8 @@ This plugin builds and packages the macOS and Windows native hosts used by the C
 
 - [../README.md](../README.md): project overview, setup, and runtime docs index
 - [../docs/kotlin-runtime-api.md](../docs/kotlin-runtime-api.md): public Kotlin runtime API snapshot
-- [../docs/swift-runtime-api.md](../docs/swift-runtime-api.md): public Swift runtime API snapshot
+- [../docs/macos-runtime-api.md](../docs/macos-runtime-api.md): public macOS Swift runtime API snapshot
+- [../docs/windows-runtime-api.md](../docs/windows-runtime-api.md): public Windows C++ runtime API snapshot
 
 ## Full Configuration
 
