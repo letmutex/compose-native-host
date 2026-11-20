@@ -87,8 +87,32 @@ struct RuntimeState {
 
     std::atomic<ComposeRuntimeEventCallback> eventCallback{nullptr};
     std::atomic<void*> eventUserData{nullptr};
+    std::atomic<ComposeHostLaunchPhase> currentPhase{ComposeHostLaunchPhase::Launching};
+    std::atomic<bool> isWindowFocused{false};
+    std::atomic<bool> isWindowOccluded{false};
     std::atomic<int32_t> currentCursorType{0};
     bool isFirstFrameRendered = false;
+
+    void EmitEvent(const ComposeHostEvent& event) {
+        if (event.type == ComposeHostEventType::PhaseChanged) {
+            if (currentPhase.exchange(event.phase) == event.phase) {
+                return;
+            }
+        } else if (event.type == ComposeHostEventType::WindowFocused) {
+            if (isWindowFocused.exchange(event.focused) == event.focused) {
+                return;
+            }
+        } else if (event.type == ComposeHostEventType::WindowOccluded) {
+            if (isWindowOccluded.exchange(event.occluded) == event.occluded) {
+                return;
+            }
+        }
+
+        auto cb = eventCallback.load();
+        if (cb) {
+            cb((HCOMPOSERUNTIME)runtimeId, &event, eventUserData.load());
+        }
+    }
 };
 
 class HostJvm {

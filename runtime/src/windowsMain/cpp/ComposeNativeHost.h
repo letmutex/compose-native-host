@@ -6,7 +6,42 @@
 // Opaque handle representing a bound Compose runtime instance
 typedef void* HCOMPOSERUNTIME;
 
-typedef void (*ComposeRuntimeEventCallback)(HCOMPOSERUNTIME runtime, const char* eventName, const char* eventPayload, void* userData);
+// Lifecycle phases of the hosted Compose runtime (mirrors Swift's ComposeHostLaunchPhase)
+enum class ComposeHostLaunchPhase {
+    Launching = 0,        // Host startup initiated
+    WindowAttached,       // Window & Direct3D 12 initialized
+    JvmReady,             // Kotlin runtime / GraalVM entry point bound
+    FirstFramePresented,  // First Compose frame presented to screen
+    Closing               // Teardown initiated
+};
+
+// Event types dispatched by the hosted Compose runtime (mirrors Swift's ComposeHostEvent)
+enum class ComposeHostEventType {
+    PhaseChanged = 1,
+    WindowFocused,
+    WindowOccluded,
+    App
+};
+
+// Strongly-typed event structure
+struct ComposeHostEvent {
+    ComposeHostEventType type;
+    union {
+        ComposeHostLaunchPhase phase;  // When type == ComposeHostEventType::PhaseChanged
+        bool focused;                  // When type == ComposeHostEventType::WindowFocused
+        bool occluded;                 // When type == ComposeHostEventType::WindowOccluded
+        struct AppPayload {
+            const char* name;
+            const char* payload;       // May be nullptr if no payload
+        } app;                         // When type == ComposeHostEventType::App
+    };
+};
+
+// Callback dispatched on lifecycle and window events.
+// Note: May be invoked concurrently from UI, render, or JVM threads. Callbacks must be
+// thread-safe and non-blocking. String pointers in ComposeHostEvent (app.name, app.payload)
+// are only valid for the synchronous duration of the callback invocation.
+typedef void (*ComposeRuntimeEventCallback)(HCOMPOSERUNTIME runtime, const ComposeHostEvent* event, void* userData);
 
 struct ComposeRuntimeConfiguration {
     std::wstring appName = L"Compose Native Host";
@@ -78,6 +113,15 @@ void ComposeRuntimeDestroy(HCOMPOSERUNTIME runtime);
 
 // Sets the callback for events dispatched from Compose.
 void ComposeRuntimeSetEventCallback(HCOMPOSERUNTIME runtime, ComposeRuntimeEventCallback callback, void* userData);
+
+// Queries the current launch phase of the runtime.
+ComposeHostLaunchPhase ComposeRuntimeGetLaunchPhase(HCOMPOSERUNTIME runtime);
+
+// Queries whether the hosted window currently has keyboard/input focus.
+bool ComposeRuntimeIsWindowFocused(HCOMPOSERUNTIME runtime);
+
+// Queries whether the hosted window is currently occluded or minimized.
+bool ComposeRuntimeIsWindowOccluded(HCOMPOSERUNTIME runtime);
 
 // Routes Win32 window messages to the Compose runtime.
 // Call this inside your custom WndProc.

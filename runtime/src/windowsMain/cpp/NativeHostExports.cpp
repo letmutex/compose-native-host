@@ -79,10 +79,10 @@ EXPORT void nativeHostPresentDrawable(int64_t runtimeId) {
         
         if (!state->isFirstFrameRendered) {
             state->isFirstFrameRendered = true;
-            auto cb = state->eventCallback.load();
-            if (cb) {
-                cb((HCOMPOSERUNTIME)state->runtimeId, "phaseChanged", "firstFramePresented", state->eventUserData.load());
-            }
+            ComposeHostEvent ev{};
+            ev.type = ComposeHostEventType::PhaseChanged;
+            ev.phase = ComposeHostLaunchPhase::FirstFramePresented;
+            state->EmitEvent(ev);
         }
     }
 }
@@ -145,10 +145,11 @@ EXPORT void nativeHostEmitAppEvent(int64_t runtimeId, const char *namePtr, const
 
     auto state = HostJvm::Get().GetRuntime(runtimeId);
     if (state) {
-        auto callback = state->eventCallback.load();
-        if (callback) {
-            callback((HCOMPOSERUNTIME)runtimeId, namePtr, payloadPtr, state->eventUserData.load());
-        }
+        ComposeHostEvent ev{};
+        ev.type = ComposeHostEventType::App;
+        ev.app.name = namePtr;
+        ev.app.payload = payloadPtr;
+        state->EmitEvent(ev);
     }
 }
 
