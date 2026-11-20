@@ -9,6 +9,9 @@ This snapshot includes the public/common API and the public macOS-specific API t
 ### Hosted entry point
 
 ```kotlin
+// Use: import letmutex.compose.nativehost.ComposeNativeHost
+//      import letmutex.compose.nativehost.isComposeNativeHostAvailable
+
 // Entry point for hosted Compose content inside the native host.
 expect fun ComposeNativeHost(content: @Composable ComposeNativeHostScope.() -> Unit)
 
@@ -19,6 +22,9 @@ expect fun isComposeNativeHostAvailable(): Boolean
 ### Host scope and event bridge
 
 ```kotlin
+// Use: import letmutex.compose.nativehost.ComposeNativeHostScope
+//      import letmutex.compose.nativehost.ComposeNativeHostHandle
+
 interface ComposeNativeHostScope {
     // Event bridge back to the native host.
     val host: ComposeNativeHostHandle
@@ -39,6 +45,8 @@ interface ComposeNativeHostHandle {
 ### Composition local
 
 ```kotlin
+// Use: import letmutex.compose.nativehost.LocalComposeNativeHostHandle
+
 // Active host handle exposed to hosted composables.
 val LocalComposeNativeHostHandle = staticCompositionLocalOf<ComposeNativeHostHandle?> { null }
 ```
@@ -46,6 +54,8 @@ val LocalComposeNativeHostHandle = staticCompositionLocalOf<ComposeNativeHostHan
 ### Window info
 
 ```kotlin
+// Use: import letmutex.compose.nativehost.WindowInfo
+
 @JvmInline
 value class WindowInfo {
     // Window width in physical pixels.
@@ -68,6 +78,8 @@ value class WindowInfo {
 ### UI thread
 
 ```kotlin
+// Use: import letmutex.compose.nativehost.NativeHostUiThread
+
 class NativeHostUiThread(
     // Thread name used for the managed UI thread.
     threadName: String = "ComposeNativeHost-Ui",
