@@ -140,6 +140,8 @@ fun registerNativeImageCompileInteropJavaTask(
             commandLine(
                 buildList {
                     add("$graalHome/bin/javac")
+                    add("-encoding")
+                    add("UTF-8")
                     add("--add-modules")
                     add("org.graalvm.nativeimage")
                     add("-cp")
@@ -308,6 +310,7 @@ internal fun registerNativeImageBuildSharedLibraryTask(
             if (hostOsPrefix == "windows") {
                 val isEnvActive = !System.getenv("INCLUDE").isNullOrBlank() && !System.getenv("LIB").isNullOrBlank()
                 val buildCmd = buildString {
+                    append("chcp 65001 >nul && ")
                     if (!isEnvActive) {
                         val vcvars64 = locateVcvars64(project).absolutePath
                         append("call \"")
