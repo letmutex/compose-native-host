@@ -42,6 +42,7 @@ fun configureWindowsNativeLauncher(
             }
 
             val compileCmd = buildString {
+                append("chcp 65001 >nul && ")
                 if (!isEnvActive) {
                     val vcvars64 = locateVcvars64(project).absolutePath
                     append("call \"")
@@ -55,7 +56,7 @@ fun configureWindowsNativeLauncher(
                     append(rcFile.absolutePath)
                     append("\" && ")
                 }
-                append("cl.exe /nologo /EHsc /O2 ")
+                append("cl.exe /nologo /EHsc /O2 /utf-8 ")
                 val sources = config.launcherSources + cppSources(File(config.extractedSourcesDir, "cpp"))
                 sources.forEach { source ->
                     append("\"")
@@ -158,13 +159,14 @@ fun configureWindowsNativeBridge(
             objDir.mkdirs()
             
             val compileCmd = buildString {
+                append("chcp 65001 >nul && ")
                 if (!isEnvActive) {
                     val vcvars64 = locateVcvars64(project).absolutePath
                     append("call \"")
                     append(vcvars64)
                     append("\" && ")
                 }
-                append("cl.exe /nologo /EHsc /O2 /LD ")
+                append("cl.exe /nologo /EHsc /O2 /LD /utf-8 ")
                 append("\"")
                 append(File(bridgeSourcesDir, "Bridge.cpp").absolutePath)
                 append("\" ")
