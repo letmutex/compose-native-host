@@ -201,6 +201,8 @@ bool HostJvm::BootstrapJvm() {
     std::lock_guard<std::mutex> lock(lock_);
     if (jvm_) return true;
 
+    logPhaseTiming("bootstrapJvm() Enter");
+
     std::wstring javaHome = ResolveJavaHome();
     if (javaHome.empty()) {
         std::cerr << "Unable to resolve JAVA_HOME." << std::endl;
@@ -245,6 +247,7 @@ bool HostJvm::BootstrapJvm() {
         classpath = ResolveClasspath();
     }
     std::string bridgePath = ResolveBridgePath();
+    logPhaseTiming("bootstrapJvm() Done Path/Configs Resolving");
 
     std::vector<std::string> jvmOptions;
     // Add default classpath and options
@@ -268,7 +271,9 @@ bool HostJvm::BootstrapJvm() {
     vmArgs.ignoreUnrecognized = JNI_TRUE;
 
     JNIEnv* env = nullptr;
+    logPhaseTiming("bootstrapJvm() Calling createVM()");
     jint res = createVM(&jvm_, (void**)&env, &vmArgs);
+    logPhaseTiming("bootstrapJvm() Done createVM()");
 
     for (size_t i = 0; i < options.size(); ++i) {
         free(options[i].optionString);
@@ -359,5 +364,3 @@ void HostJvm::Shutdown() {
         jvmDll_ = nullptr;
     }
 }
-
-

@@ -145,6 +145,9 @@ bool ComposeHostInitialize(const ComposeHostConfiguration& config);
 /// Shuts down the Compose Native Host engine and releases global runtime resources.
 void ComposeHostShutdown();
 
+/// Emits a phase timing log line when host logging is enabled.
+void LogPhaseTiming(const char* namePtr);
+
 /// Binds an existing HWND to a Compose runtime.
 /// Initializes Direct3D 12, starts the Kotlin runtime, and spawns the render thread.
 /// Returns a runtime handle on success, or NULL on failure.
