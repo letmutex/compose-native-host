@@ -103,6 +103,9 @@ bool ComposeHostInitialize(const ComposeHostConfiguration& config);
 // Shuts down the Compose Native Host engine (destroys the JVM).
 void ComposeHostShutdown();
 
+// Emits a phase timing log line when host logging is enabled.
+void LogPhaseTiming(const char* namePtr);
+
 // Binds an existing HWND to a Compose runtime.
 // Registers the window, initializes D3D12, starts the Kotlin runtime, and spawns the render thread.
 // Returns a handle on success, or NULL on failure.

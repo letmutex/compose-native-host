@@ -14,6 +14,7 @@
 #include <thread>
 #include "D3D12Renderer.h"
 #include "InputEvents.h"
+#include "HostLogging.h"
 
 struct Win32WindowInfo {
     int32_t width = 0;
@@ -91,6 +92,7 @@ struct RuntimeState {
     std::atomic<bool> isWindowFocused{false};
     std::atomic<bool> isWindowOccluded{false};
     std::atomic<int32_t> currentCursorType{0};
+    std::atomic<bool> didFirstDraw{false};
     bool isFirstFrameRendered = false;
 
     void EmitEvent(const ComposeHostEvent& event) {

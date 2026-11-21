@@ -46,6 +46,7 @@ bool HostJvm::PrepareRuntime(int64_t runtimeId, const std::string& mainClassName
                     runtimeClass_ = nullptr;
                     return;
                 }
+                logPhaseTiming("ComposeRuntime handles cached");
             }
         }
 
@@ -98,6 +99,7 @@ bool HostJvm::PrepareRuntime(int64_t runtimeId, const std::string& mainClassName
 
         env->CallStaticVoidMethod(runtimeClass_, exitCurrentRuntimeMethod_);
 
+        logPhaseTiming("prepareRuntime() Done");
         prepared = true;
     });
 

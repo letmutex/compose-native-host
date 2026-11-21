@@ -1,5 +1,6 @@
 #include "NativeHostExports.h"
 #include "HostJvm.h"
+#include "HostLogging.h"
 #include <iostream>
 
 // Custom window message to marshal IME geometry updates to the UI thread
@@ -76,7 +77,7 @@ EXPORT void nativeHostPresentDrawable(int64_t runtimeId) {
         // Use syncInterval=0 since the render loop is already throttled to VSync natively via DwmFlush.
         // This avoids double-throttling / serializing the UI thread and render thread, allowing proper pipelining.
         state->renderer.Present(0);
-        
+
         if (!state->isFirstFrameRendered) {
             state->isFirstFrameRendered = true;
             ComposeHostEvent ev{};
@@ -140,7 +141,7 @@ EXPORT void nativeHostSetPointerIcon(int64_t runtimeId, int32_t cursorType) {
 }
 
 EXPORT void nativeHostEmitAppEvent(int64_t runtimeId, const char *namePtr, const char *payloadPtr) {
-    std::cout << "nativeHostEmitAppEvent: " << (namePtr ? namePtr : "null") 
+    std::cout << "nativeHostEmitAppEvent: " << (namePtr ? namePtr : "null")
               << ", payload: " << (payloadPtr ? payloadPtr : "null") << std::endl;
 
     auto state = HostJvm::Get().GetRuntime(runtimeId);
@@ -154,7 +155,7 @@ EXPORT void nativeHostEmitAppEvent(int64_t runtimeId, const char *namePtr, const
 }
 
 EXPORT void nativeHostLogPhaseTiming(const char *namePtr) {
-    std::cout << "nativeHostLogPhaseTiming: " << (namePtr ? namePtr : "null") << std::endl;
+    logPhaseTiming(namePtr);
 }
 
 EXPORT void nativeHostEmitProfileFrameSample(

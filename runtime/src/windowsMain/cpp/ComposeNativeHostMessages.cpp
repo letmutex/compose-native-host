@@ -70,6 +70,9 @@ static bool HandleSize(const std::shared_ptr<RuntimeState>& state, WPARAM wParam
 }
 
 static bool HandlePaint(const std::shared_ptr<RuntimeState>& state) {
+    if (state && !state->didFirstDraw.exchange(true)) {
+        logPhaseTiming("Native Window First Draw");
+    }
     RequestRenderTick(state);
     return false;
 }

@@ -2,6 +2,7 @@
 #include "HostJvm.h"
 #include "ComposeDropTarget.h"
 #include "DpiHelper.h"
+#include "HostLogging.h"
 #include <windowsx.h>
 #include <atomic>
 #include <iostream>
@@ -242,6 +243,10 @@ static bool InitializeJvmRuntime(const ComposeRuntimeStartup& startup) {
 // Initializes COM, enables DPI awareness, parses the application configuration (.cfg),
 // and routes initialization to either the JVM or the GraalVM shared library.
 bool ComposeHostInitialize(const ComposeHostConfiguration& config) {
+    SetHostLoggingEnabled(config.enableLogging);
+
+    logPhaseTiming("ComposeHostInitialize()");
+
     OleInitialize(NULL);
     EnableDpiAwareness();
 
@@ -292,6 +297,10 @@ void ComposeHostShutdown() {
         g_GraalIsolate = nullptr;
         g_useSharedLibraryRuntime = false;
     }
+}
+
+void LogPhaseTiming(const char *namePtr) {
+    logPhaseTiming(namePtr);
 }
 
 // Background rendering loop for the GraalVM shared library mode.
@@ -401,6 +410,7 @@ static void StartSharedLibraryRenderLoop(int64_t runtimeId, std::string mainClas
 }
 
 static void StartJvmRenderLoop(int64_t runtimeId, std::string mainClassName, bool enableProfile) {
+    logPhaseTiming("JVM Thread Start");
     auto s = HostJvm::Get().GetRuntime(runtimeId);
     if (!s) return;
     if (HostJvm::Get().PrepareRuntime(runtimeId, mainClassName, enableProfile)) {
@@ -465,6 +475,7 @@ HCOMPOSERUNTIME ComposeRuntimeCreate(HWND hwnd, const ComposeRuntimeConfiguratio
     }
 
     {
+        logPhaseTiming("Window Attached");
         ComposeHostEvent ev{};
         ev.type = ComposeHostEventType::PhaseChanged;
         ev.phase = ComposeHostLaunchPhase::WindowAttached;
@@ -554,6 +565,3 @@ bool ComposeRuntimeIsWindowOccluded(HCOMPOSERUNTIME runtime) {
     auto state = HostJvm::Get().GetRuntime(runtimeId);
     return state ? state->isWindowOccluded.load() : false;
 }
-
-
-
